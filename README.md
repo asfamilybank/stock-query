@@ -2,6 +2,19 @@
 
 实时查询中国 A 股股票、ETF 及场外基金价格，红涨绿跌一目了然。
 
+## 安装
+
+```bash
+npx clawhub install cn-stock-query
+```
+
+或手动克隆：
+
+```bash
+cd ~/.openclaw/workspace/skills/
+git clone https://github.com/asfamilybank/cn-stock-query.git
+```
+
 ## 功能概览
 
 - **股票/ETF 实时行情** — 沪深两市全覆盖，支持批量查询
