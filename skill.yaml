@@ -1,5 +1,5 @@
 name: cn-stock-query
-version: 1.0.2
+version: 1.0.3
 author: asfamilybank
 description: >
   查询中国 A 股股票、场内 ETF、场外基金的实时/最新价格，支持批量查询和持仓市值计算。
@@ -17,7 +17,7 @@ config:
     type: string
     required: false
     default: ""
-    description: "可选：持仓文件路径（CSV/JSON），用于批量查询和计算市值"
+    description: "可选：持仓文件路径（CSV/JSON），用于批量查询和计算市值。脚本不会自动读取；若配置，agent 可能按用户指令读取，请勿指向含敏感信息的文件。"
 
 entryPoint:
   type: natural
