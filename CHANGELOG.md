@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.3] - 2026-03-19
+
+### Changed
+- SKILL.md：增加「安全与隐私说明」小节，说明基金估值接口（fundgz.1234567.com.cn）为 HTTP 无 TLS 的用途与风险，以及 portfolio_file 配置项不自动读取、勿指向敏感文件的提示
+- skill.yaml：在 config.portfolio_file 描述中增加「脚本不会自动读取；若配置，agent 可能按用户指令读取，请勿指向含敏感信息的文件」
+- 回应 ClawHub Instruction Scope 检测相关警示
+
 ## [1.0.2] - 2026-03-18
 
 ### Fixed
