@@ -1,13 +1,13 @@
 {
-  "name": "cn-stock-query",
-  "tagline": "实时查询 A 股股票、ETF 及场外基金价格，红涨绿跌一目了然",
-  "description": "一站式查询中国 A 股市场行情的 OpenClaw Skill。支持沪深股票、场内 ETF、场外基金的实时价格/净值/估值查询，自动识别市场和标的类型，批量查询，持仓市值计算，涨跌幅用红绿 emoji 直观标识（遵循 A 股红涨绿跌惯例）。\n\n数据源采用新浪财经（股票/ETF）和天天基金（场外基金），无需 API Key，开箱即用。内置 GBK 编码自动转换、市场前缀防碰撞校验、QDII 基金延迟标注等健壮性处理。\n\n适合个人投资者日常看盘、持仓管理、定期复盘使用。",
+  "name": "stock-query",
+  "tagline": "实时查询全球股票行情（A股/港股/美股/ETF/基金/指数），红涨绿跌一目了然",
+  "description": "一站式查询全球主要市场股票行情的 OpenClaw Skill。支持 A 股（沪深股票、场内 ETF、场外基金、主要指数）、港股（腾讯、阿里、美团等）、美股（AAPL、TSLA、NVDA 等）及全球主要指数（道琼斯、纳斯达克、标普500）的实时价格查询。\n\n自动识别市场和标的类型，支持跨市场批量查询，持仓市值计算。A 股/港股遵循红涨绿跌惯例，美股遵循绿涨红跌惯例。\n\n数据源采用腾讯财经（全球市场）、新浪财经（A 股备用）和天天基金（场外基金），无需 API Key，开箱即用。",
   "category": "data",
-  "tags": ["stock", "finance", "china", "a-share", "etf", "fund", "investment", "portfolio"],
-  "version": "1.0.4",
+  "tags": ["stock", "finance", "china", "a-share", "etf", "fund", "index", "investment", "portfolio", "hong-kong", "us-stock", "global"],
+  "version": "2.0.0",
   "license": "MIT",
   "pricing": "free",
-  "repository": "https://github.com/asfamilybank/cn-stock-query",
-  "support_url": "https://github.com/asfamilybank/cn-stock-query/issues",
-  "homepage": "https://github.com/asfamilybank/cn-stock-query"
+  "repository": "https://github.com/asfamilybank/stock-query",
+  "support_url": "https://github.com/asfamilybank/stock-query/issues",
+  "homepage": "https://github.com/asfamilybank/stock-query"
 }

@@ -161,7 +161,8 @@ skip_if_market_closed() {
 
 skip_if_no_network() {
   local desc="$1"
-  if ! curl -s --max-time 3 "https://hq.sinajs.cn" >/dev/null 2>&1; then
+  if ! curl -s --max-time 3 "https://qt.gtimg.cn" >/dev/null 2>&1 && \
+     ! curl -s --max-time 3 "https://hq.sinajs.cn" >/dev/null 2>&1; then
     test_skip "$desc" "无网络连接"
     return 0
   fi

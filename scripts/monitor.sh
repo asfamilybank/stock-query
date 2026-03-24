@@ -9,7 +9,9 @@ TIMEOUT=5
 FAIL=0
 TOTAL=0
 
-STOCK_CODES=("sh600519" "sh510300" "sz000001" "sh518880" "sh512890")
+CN_CODES=("sh600519" "sh510300" "sz000001" "sh518880" "sh512890")
+HK_CODES=("hk00700" "hk09988")
+US_CODES=("usAAPL" "usTSLA" "us.DJI")
 FUND_CODES=("110011" "005827" "001549")
 
 echo "=============================="
@@ -18,8 +20,83 @@ echo " $(date '+%Y-%m-%d %H:%M:%S')"
 echo "=============================="
 echo ""
 
-echo "--- 股票/ETF（新浪财经）---"
-for code in "${STOCK_CODES[@]}"; do
+echo "--- A股（腾讯财经·首选）---"
+for code in "${CN_CODES[@]}"; do
+  TOTAL=$((TOTAL + 1))
+  result=$(curl -s -m $TIMEOUT "https://qt.gtimg.cn/q=${code}" | iconv -f GBK -t UTF-8 2>/dev/null)
+
+  if [[ -z "$result" ]] || [[ "$result" == *'=""'* ]]; then
+    echo "[FAIL] ${code} 返回空"
+    FAIL=$((FAIL + 1))
+  else
+    data=$(echo "$result" | cut -d'"' -f2)
+    IFS='~' read -ra fields <<< "$data"
+    name="${fields[1]:-}"
+    price="${fields[3]:-}"
+    datetime="${fields[30]:-}"
+    if [[ -n "$name" && -n "$price" ]]; then
+      echo "[OK]   ${code} | ${name} | ${price} | ${datetime}"
+    else
+      echo "[FAIL] ${code} 字段解析失败"
+      FAIL=$((FAIL + 1))
+      TOTAL=$((TOTAL - 1))
+    fi
+  fi
+done
+
+echo ""
+echo "--- 港股（腾讯财经）---"
+for code in "${HK_CODES[@]}"; do
+  TOTAL=$((TOTAL + 1))
+  result=$(curl -s -m $TIMEOUT "https://qt.gtimg.cn/q=${code}" | iconv -f GBK -t UTF-8 2>/dev/null)
+
+  if [[ -z "$result" ]] || [[ "$result" == *'=""'* ]]; then
+    echo "[FAIL] ${code} 返回空"
+    FAIL=$((FAIL + 1))
+  else
+    data=$(echo "$result" | cut -d'"' -f2)
+    IFS='~' read -ra fields <<< "$data"
+    name="${fields[1]:-}"
+    price="${fields[3]:-}"
+    datetime="${fields[30]:-}"
+    if [[ -n "$name" && -n "$price" ]]; then
+      echo "[OK]   ${code} | ${name} | ${price} | ${datetime}"
+    else
+      echo "[FAIL] ${code} 字段解析失败"
+      FAIL=$((FAIL + 1))
+      TOTAL=$((TOTAL - 1))
+    fi
+  fi
+done
+
+echo ""
+echo "--- 美股（腾讯财经）---"
+for code in "${US_CODES[@]}"; do
+  TOTAL=$((TOTAL + 1))
+  result=$(curl -s -m $TIMEOUT "https://qt.gtimg.cn/q=${code}" | iconv -f GBK -t UTF-8 2>/dev/null)
+
+  if [[ -z "$result" ]] || [[ "$result" == *'=""'* ]]; then
+    echo "[FAIL] ${code} 返回空"
+    FAIL=$((FAIL + 1))
+  else
+    data=$(echo "$result" | cut -d'"' -f2)
+    IFS='~' read -ra fields <<< "$data"
+    name="${fields[1]:-}"
+    price="${fields[3]:-}"
+    datetime="${fields[30]:-}"
+    if [[ -n "$name" && -n "$price" ]]; then
+      echo "[OK]   ${code} | ${name} | ${price} | ${datetime}"
+    else
+      echo "[FAIL] ${code} 字段解析失败"
+      FAIL=$((FAIL + 1))
+      TOTAL=$((TOTAL - 1))
+    fi
+  fi
+done
+
+echo ""
+echo "--- A股（新浪财经·备用）---"
+for code in "${CN_CODES[@]}"; do
   TOTAL=$((TOTAL + 1))
   result=$(curl -s -m $TIMEOUT "https://hq.sinajs.cn/list=${code}" \
     -H "Referer: https://finance.sina.com.cn" | iconv -f GBK -t UTF-8 2>/dev/null)
