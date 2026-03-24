@@ -11,6 +11,10 @@
 
 > ⚠️ `claude/`（无点号）不是 Claude Code 标准 skill 路径。标准路径为 `.claude/skills/stock-query/SKILL.md`。当前状态待验证是否真正注册为 slash command。
 
+Claude Code **没有内置 skill 安装命令**，无官方 skill 市场。社区 skill 分发只能通过文件复制或 curl 脚本。
+全局 skill 路径：`~/.claude/skills/<skill-name>/SKILL.md`（所有项目可用）
+新安装/更新的 skill 需重启 Claude Code session 才能生效。
+
 ## 修改规范
 
 **修改 skill 逻辑时，两个 SKILL.md 必须同步更新：**
