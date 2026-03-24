@@ -4,8 +4,6 @@ description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及场内 ETF、场外基金、主要指数。
   Use when: 用户要求查询股价、基金净值、ETF 价格、大盘指数，或需要计算持仓市值时。
   NOT for: 加密货币、期货、期权、外汇。
-metadata: {"openclaw":{"emoji":"📈","requires":{"bins":["curl","iconv","bc"],"os":["darwin","linux"]}}}
-tools: [shell]
 ---
 
 # 全球股票/ETF/基金/指数 实时价格查询
