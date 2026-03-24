@@ -4,6 +4,8 @@
 
 ## 安装
 
+**通过 ClawHub（OpenClaw 格式，自然语言触发）：**
+
 ```bash
 npx clawhub install cn-stock-query
 ```
@@ -13,6 +15,20 @@ npx clawhub install cn-stock-query
 ```bash
 cd ~/.openclaw/workspace/skills/
 git clone https://github.com/asfamilybank/cn-stock-query.git
+```
+
+**通过 Claude Code（原生 slash command，`/cn-stock-query` 直接调用）：**
+
+```bash
+# 复制到项目级（仅当前项目可用）
+mkdir -p .claude/skills/cn-stock-query
+curl -o .claude/skills/cn-stock-query/SKILL.md \
+  https://raw.githubusercontent.com/asfamilybank/cn-stock-query/main/claude/SKILL.md
+
+# 或复制到用户级（所有项目可用）
+mkdir -p ~/.claude/skills/cn-stock-query
+curl -o ~/.claude/skills/cn-stock-query/SKILL.md \
+  https://raw.githubusercontent.com/asfamilybank/cn-stock-query/main/claude/SKILL.md
 ```
 
 ## 功能概览
@@ -26,7 +42,7 @@ git clone https://github.com/asfamilybank/cn-stock-query.git
 
 ## 使用方式
 
-安装后直接对话触发：
+**OpenClaw 格式**（自然语言触发）：
 
 ```
 查一下 601991 和 518880 的最新价
@@ -44,6 +60,14 @@ git clone https://github.com/asfamilybank/cn-stock-query.git
 
 ```
 查一下黄金ETF和卫星ETF的行情
+```
+
+**Claude Code 原生格式**（slash command）：
+
+```
+/cn-stock-query 601991 518880
+/cn-stock-query 014978
+/cn-stock-query 黄金ETF 卫星ETF
 ```
 
 ## 输出示例

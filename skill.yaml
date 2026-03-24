@@ -1,5 +1,5 @@
 name: cn-stock-query
-version: 1.0.3
+version: 1.0.4
 author: asfamilybank
 description: >
   查询中国 A 股股票、场内 ETF、场外基金的实时/最新价格，支持批量查询和持仓市值计算。

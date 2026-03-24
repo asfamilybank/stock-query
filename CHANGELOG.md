@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.0.4] - 2026-03-24
+
+### Added
+- `claude/SKILL.md`：新增 Claude Code 原生 skill 文件，支持 `/cn-stock-query` slash command 直接调用，无需自然语言触发
+- README 补充 Claude Code 安装方式（用户级/项目级）及 slash command 使用示例
+
 ## [1.0.3] - 2026-03-19
 
 ### Changed
