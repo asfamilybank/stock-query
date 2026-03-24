@@ -20,16 +20,14 @@ git clone https://github.com/asfamilybank/stock-query.git
 **通过 Claude Code（原生 slash command，`/stock-query` 直接调用）：**
 
 ```bash
-# 复制到项目级（仅当前项目可用）
-mkdir -p .claude/skills/stock-query
-curl -o .claude/skills/stock-query/SKILL.md \
-  https://raw.githubusercontent.com/asfamilybank/stock-query/main/claude/SKILL.md
+# 全局安装（所有项目可用，推荐）
+curl -fsSL https://raw.githubusercontent.com/asfamilybank/stock-query/main/install.sh | bash
 
-# 或复制到用户级（所有项目可用）
-mkdir -p ~/.claude/skills/stock-query
-curl -o ~/.claude/skills/stock-query/SKILL.md \
-  https://raw.githubusercontent.com/asfamilybank/stock-query/main/claude/SKILL.md
+# 项目级安装（仅当前项目可用）
+curl -fsSL https://raw.githubusercontent.com/asfamilybank/stock-query/main/install.sh | bash -s -- --project
 ```
+
+重新运行同一命令即可更新到最新版本。
 
 ## 功能概览
 
