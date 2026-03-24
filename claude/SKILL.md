@@ -1,5 +1,6 @@
 ---
 name: stock-query
+version: 2.0.1
 description: 查询全球股票实时行情（A股/港股/美股）、ETF、场外基金及主要指数。用法：/stock-query AAPL 00700 601991
 user-invocable: true
 allowed-tools:

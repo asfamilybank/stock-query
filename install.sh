@@ -38,20 +38,43 @@ if ! command -v curl &>/dev/null; then
   exit 1
 fi
 
-echo "Installing stock-query Claude Code skill (${SCOPE})..."
+# Extract version from a SKILL.md file
+extract_version() {
+  grep '^version:' "$1" 2>/dev/null | awk '{print $2}' | tr -d '"'
+}
 
-# Detect update vs fresh install
-if [ -f "${INSTALL_DIR}/SKILL.md" ]; then
-  ACTION="Updated"
+# Download remote SKILL.md to temp file
+TMP_FILE="$(mktemp)"
+trap 'rm -f "${TMP_FILE}"' EXIT
+
+echo "正在获取最新版本信息..."
+curl -fsSL "${SKILL_FILE_URL}" -o "${TMP_FILE}"
+
+REMOTE_VERSION="$(extract_version "${TMP_FILE}")"
+REMOTE_VERSION="${REMOTE_VERSION:-unknown}"
+
+LOCAL_SKILL="${INSTALL_DIR}/SKILL.md"
+
+if [ -f "${LOCAL_SKILL}" ]; then
+  LOCAL_VERSION="$(extract_version "${LOCAL_SKILL}")"
+  LOCAL_VERSION="${LOCAL_VERSION:-unknown}"
+
+  echo "当前已安装版本：v${LOCAL_VERSION}"
+  echo "最新版本：      v${REMOTE_VERSION}"
+  echo ""
+
+  if [ "${LOCAL_VERSION}" = "${REMOTE_VERSION}" ]; then
+    echo "已是最新版本，无需更新。"
+    exit 0
+  fi
+
+  cp "${TMP_FILE}" "${LOCAL_SKILL}"
+  echo "已更新至最新版本 v${REMOTE_VERSION}（原版本 v${LOCAL_VERSION}）"
 else
-  ACTION="Installed"
   mkdir -p "${INSTALL_DIR}"
+  cp "${TMP_FILE}" "${LOCAL_SKILL}"
+  echo "已安装 stock-query v${REMOTE_VERSION}（${SCOPE}）"
+  echo ""
+  echo "使用方式："
+  echo "  /stock-query AAPL 00700 601991"
 fi
-
-curl -fsSL "${SKILL_FILE_URL}" -o "${INSTALL_DIR}/SKILL.md"
-
-echo ""
-echo "${ACTION} successfully: ${INSTALL_DIR}/SKILL.md"
-echo ""
-echo "Usage in Claude Code:"
-echo "  /stock-query AAPL 00700 601991"

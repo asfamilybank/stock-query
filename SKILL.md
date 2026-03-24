@@ -1,5 +1,6 @@
 ---
 name: stock-query
+version: 2.0.1
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及场内 ETF、场外基金、主要指数。
   Use when: 用户要求查询股价、基金净值、ETF 价格、大盘指数，或需要计算持仓市值时。
