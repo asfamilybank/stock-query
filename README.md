@@ -2,7 +2,7 @@
 
 实时查询全球主要市场股票行情：A 股、港股、美股，以及 ETF、场外基金、主要指数。
 
-## 安装
+## 安装 / 更新
 
 **通过 ClawHub（OpenClaw 格式，自然语言触发）：**
 
@@ -20,14 +20,14 @@ git clone https://github.com/asfamilybank/stock-query.git
 **通过 Claude Code（原生 slash command，`/stock-query` 直接调用）：**
 
 ```bash
-# 全局安装（所有项目可用，推荐）
+# 全局安装或更新（所有项目可用，推荐）
 curl -fsSL https://raw.githubusercontent.com/asfamilybank/stock-query/main/install.sh | bash
 
-# 项目级安装（仅当前项目可用）
+# 项目级安装或更新（仅当前项目可用）
 curl -fsSL https://raw.githubusercontent.com/asfamilybank/stock-query/main/install.sh | bash -s -- --project
 ```
 
-重新运行同一命令即可更新到最新版本。
+首次运行为安装，已安装时自动检测版本并更新至最新版本。
 
 ## 功能概览
 
