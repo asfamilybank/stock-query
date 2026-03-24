@@ -63,7 +63,7 @@ if [ -f "${LOCAL_SKILL}" ]; then
   echo "最新版本：      v${REMOTE_VERSION}"
   echo ""
 
-  if [ "${LOCAL_VERSION}" = "${REMOTE_VERSION}" ]; then
+  if [ "${LOCAL_VERSION}" != "unknown" ] && [ "${LOCAL_VERSION}" = "${REMOTE_VERSION}" ]; then
     echo "已是最新版本，无需更新。"
     exit 0
   fi
