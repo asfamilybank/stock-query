@@ -14,7 +14,7 @@
 `description` 字段决定 Claude 是否主动识别用户意图调用 skill（不等待斜杠命令）：
 - 必须包含 `TRIGGER when: <触发条件>` — 否则 Claude 会绕过 skill 自己实现
 - 必须包含 `NOT for: <排除场景>` — 防止误触发
-- 格式参考根目录 `SKILL.md` 的 `Use when` / `NOT for` 字段，两者语义对齐
+- 格式参考根目录 `SKILL.md` 的 `TRIGGER when` / `NOT for` 字段，两者语义对齐
 
 > ⚠️ `claude/`（无点号）不是 Claude Code 标准 skill 路径。标准路径为 `.claude/skills/stock-query/SKILL.md`。当前状态待验证是否真正注册为 slash command。
 
@@ -30,7 +30,7 @@
 
 - 版本号需在三处同步维护：`skill.yaml`、`SKILL.md`（frontmatter）、`claude/SKILL.md`（frontmatter）（`clawhub.json` 仅作本地参考，不参与发布）
 - 注意：两个 SKILL.md 的 Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），bump 时需用 `replace_all` 一并替换
-- **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有实质功能变化时才执行；`claude/` 目录的改动不需要触发 ClawHub 发布
+- **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有变化时执行；description/触发条件改动发 patch，功能改动发 minor/major；`claude/` 目录的改动不需要触发 ClawHub 发布
 
 ### ClawHub 发布流程
 
