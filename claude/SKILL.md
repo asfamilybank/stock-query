@@ -1,6 +1,6 @@
 ---
 name: stock-query
-version: 2.1.2
+version: 2.2.0
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及场内 ETF、场外基金、主要指数。
   需要：curl（HTTP 请求）、iconv（GBK→UTF-8 转码）。
@@ -33,11 +33,11 @@ allowed-tools:
 
 | 权限 | 声明用途 | 限制 |
 |------|---------|------|
-| `Bash` | curl / iconv / portfolio.sh | 仅执行已声明操作：行情查询转码、portfolio.csv 增删改查；不执行任意命令 |
+| `Bash` | curl / iconv / grep / awk | 仅执行已声明操作：行情查询转码、portfolio.csv 增删改查；不执行任意命令 |
 
 **网络访问：** 仅限 `qt.gtimg.cn`、`hq.sinajs.cn`、`fundgz.1234567.com.cn`、`api.fund.eastmoney.com` 四个行情数据源，不发送用户个人数据。
 
-**文件访问：** 本 skill 仅在用户**显式指令**下，通过 `portfolio.sh` 读写 `portfolio.csv` 一个文件。文件路径由 `PORTFOLIO_FILE` 环境变量（对应 `config.portfolio_file` 配置项）指定；未配置时在 skill 默认安装目录下查找。不访问其他系统文件。
+**文件访问：** 本 skill 仅在用户**显式指令**下读写 `portfolio.csv` 一个文件。文件路径由 `PORTFOLIO_FILE` 环境变量（对应 `config.portfolio_file` 配置项）指定；未配置时在默认安装目录（`~/.openclaw/workspace/skills/stock-query/` 或 `~/.claude/skills/stock-query/`）下查找。不访问其他系统文件。
 
 **自动触发范围：** 关键词匹配触发行情查询（Command 2）。**文件操作（Command 3）不会自动触发**，仅在用户明确发出增/删/改/查 portfolio 指令时执行。
 
@@ -54,12 +54,12 @@ allowed-tools:
 
 version 输出：
 ```
-stock-query v2.1.2
+stock-query v2.2.0
 ```
 
 help 输出：
 ```
-stock-query v2.1.2 — 全球股票/ETF/基金/指数实时行情查询
+stock-query v2.2.0 — 全球股票/ETF/基金/指数实时行情查询
 
 用法：
   /stock-query <代码> [代码2 ...]   查询一个或多个标的
@@ -100,7 +100,7 @@ stock-query v2.1.2 — 全球股票/ETF/基金/指数实时行情查询
 从用户消息中提取标的代码。支持以下输入形式：
 
 - **6 位纯数字** → A 股（股票/ETF/指数/基金）
-- **5 位纯数字** → 港股（如 00700、09988）
+- **≤5 位纯数字** → 港股（如 700、9988、00700、09988）；不足 5 位时自动补全前置零（700 → 00700，9988 → 09988）
 - **英文字母或英文+数字** → 美股 ticker（如 AAPL、TSLA、BIDU）
 - **中文/英文名称** → 尝试匹配常见标的（见下表）
 
@@ -163,8 +163,8 @@ elif input 包含英文字母:
 elif input 是 6 位纯数字:
     # A 股市场识别（原有逻辑）
     if code.startsWith('000') and len==6:
-        market = 'sh'       # 沪市指数（注意与深市股票歧义）
-        type = 'index_or_stock'
+        # 白名单命中 → 沪市指数；否则默认深市股票（见第二步）
+        type = 'index_or_stock'  # 在第二步通过白名单确定最终市场
     elif code.startsWith('399'):
         market = 'sz'       # 深市指数
         type = 'index'
@@ -183,13 +183,17 @@ elif input 是 6 位纯数字:
     else:
         type = 'fund'       # 场外基金（2/4/7/8/9 开头）
 
-第二步：A 股歧义处理
+第二步：A 股 000xxx 处理
 
-对 type='index_or_stock' 的 000 开头代码：
-1. 用户提到"指数""大盘""上证" → sh 前缀（指数）
-2. 用户提到股票名称或"股票" → sz 前缀（深市股票）
-3. 无法判断：先查 sh{code}，名称含"指数"则确认为指数；否则查 sz{code}
-4. 典型歧义：000001 → sh000001 上证指数，sz000001 平安银行
+已知沪市指数白名单（sh 前缀，无需二次查询）：
+  000001, 000010, 000015, 000016, 000300, 000688,
+  000852, 000903, 000905, 000906, 000985
+
+识别规则：
+1. code 在白名单中 → 直接用 sh{code}，type = 'index'
+2. 用户上下文含"指数"/"大盘"/"上证" → 尝试 sh{code}
+3. 其他 000xxx 代码 → 默认 sz{code}（深市股票）
+   典型歧义：000001 → 白名单命中 sh000001 上证指数；sz000001 平安银行
 
 对 type='stock_or_fund' 的代码做二次确认：
 1. 用腾讯接口查询 sz{code}
@@ -283,6 +287,32 @@ curl -s "https://hq.sinajs.cn/list={market}{code}" \
 
 新浪涨跌额 = [3] - [2]，涨跌幅 = ([3] - [2]) / [2] × 100%
 
+#### 3c. 东方财富（港股/美股备用）
+
+仅在腾讯接口对港股/美股返回空或超时时使用。响应为 UTF-8，**无需 iconv 转码**。
+
+```bash
+# 港股备用（secid = 116. + 5位港股代码）
+curl -s "https://push2.eastmoney.com/api/qt/stock/get?secid=116.{code}&fields=f43,f57,f58,f169,f170,f47&fltt=2"
+
+# 美股备用：先试 NASDAQ（105），data 为 null 时再试 NYSE（106）
+curl -s "https://push2.eastmoney.com/api/qt/stock/get?secid=105.{TICKER}&fields=f43,f57,f58,f169,f170,f47&fltt=2"
+curl -s "https://push2.eastmoney.com/api/qt/stock/get?secid=106.{TICKER}&fields=f43,f57,f58,f169,f170,f47&fltt=2"
+```
+
+响应字段（JSON，`fltt=2` 时直接为浮点值）：
+
+| 字段 | 含义 |
+|------|------|
+| f43  | 最新价 |
+| f57  | 代码 |
+| f58  | 名称 |
+| f169 | 涨跌额 |
+| f170 | 涨跌幅 % |
+| f47  | 成交量 |
+
+若 `data` 字段为 `null`，说明该 secid 无效（美股换交易所重试，港股代码有误）。
+
 ### Step 4: 查询场外基金净值
 
 对 type 为 fund 的标的（仅 A 股场外基金）：
@@ -304,16 +334,15 @@ curl -s "http://fundgz.1234567.com.cn/js/{code}.js"
 
 **新鲜度检查（必须执行）：**
 
-获取 4a 数据后，提取 `gztime` 中的日期部分，与今日日期比较：
+获取 4a 数据后，提取 `gztime` 中的日期部分，与今日日期直接比较：
 
 ```
 gztime_date = gztime 前10位（YYYY-MM-DD）
-days_diff    = today - gztime_date（自然日）
 
-if days_diff <= 2:
-    数据新鲜 → 使用 4a 结果
+if gztime_date == today:
+    数据新鲜 → 使用 4a 结果（今日估算）
 else:
-    数据滞后 → 忽略 4a，执行 4b
+    数据非今日 → 忽略 4a，执行 4b（取确认净值）
 ```
 
 **4b. 备用：最新确认净值（eastmoney）**
@@ -332,15 +361,15 @@ eastmoney 响应中取 `Data.LSJZList[0]`，关键字段：
 ```
 if 4a 为空（jsonpgz() 无内容）:
     使用 4b，标注 `（净值，非估值）`
-elif 4a 滞后（days_diff > 2）:
+elif gztime_date != today（数据非今日）:
     使用 4b，标注 `（净值，非估值）`
-    若 4b 也无数据 → 使用 4a 滞后数据，在备注中注明数据日期
+    若 4b 也无数据 → 使用 4a，备注中注明数据日期
 else:
     使用 4a 估算净值，标注 `（估）`
 ```
 
 **QDII 基金特殊处理：**
-基金名称含"QDII""纳斯达克""标普""海外""美国""全球"，4b 净值日期落后 >2 天属正常——QDII 基金净值公布有 T+2 至 T+7 的系统性延迟。附加提示：`⏳ QDII基金，净值公布有 T+2~T+7 延迟`
+基金名称含"QDII""纳斯达克""标普""海外""美国""全球"时，若 4b 净值日期非今日属正常（净值公布有 T+2 至 T+7 系统性延迟），附加提示：`⏳ QDII基金，净值公布有 T+2~T+7 延迟`
 
 ### Step 5: 格式化输出
 
@@ -431,37 +460,40 @@ else:
 
 ## Command 3: Portfolio 文件管理
 
-**强制要求：所有增删改查操作必须通过 Bash 工具执行 `portfolio.sh` 脚本完成，禁止依赖会话记忆或凭空回复。未执行脚本不得声称操作已完成。**
+**强制要求：所有增删改查操作必须通过 Bash 工具执行实际命令，禁止依赖会话记忆或凭空回复。未执行命令不得声称操作已完成。**
 
-### 脚本定位（每次进入 Command 3 必须首先执行）
+### 文件定位（每次进入 Command 3 必须首先执行）
 
-立即执行以下 Bash 命令定位脚本，将输出路径赋值给 `PORTFOLIO_SH`：
+执行以下命令确定 `portfolio.csv` 路径，赋值给 `PFILE`：
 
 ```bash
-PORTFOLIO_SH=$(
-  for p in \
-    "$HOME/.openclaw/workspace/skills/stock-query/portfolio.sh" \
-    "$HOME/.claude/skills/stock-query/portfolio.sh" \
-    ".claude/skills/stock-query/portfolio.sh"; do
-    [ -f "$p" ] && echo "$p" && break
+PFILE="${PORTFOLIO_FILE:-}"
+if [ -z "$PFILE" ]; then
+  for _p in \
+    "$HOME/.openclaw/workspace/skills/stock-query/portfolio.csv" \
+    "$HOME/.claude/skills/stock-query/portfolio.csv"; do
+    [ -f "$_p" ] && PFILE="$_p" && break
   done
-)
-echo "${PORTFOLIO_SH:-NOT_FOUND}"
+fi
+echo "${PFILE:-NOT_FOUND}"
 ```
 
-- 若输出 `NOT_FOUND`：提示用户重新安装 skill，终止
-- 否则：用此路径执行所有后续操作
+- 输出 `NOT_FOUND`：文件不存在，引导用户创建（见下方）
+- 否则：将路径用于所有后续操作
 
-**portfolio.csv 不存在时**（脚本返回 `ERROR:FILE_NOT_FOUND`），引导用户创建：
+> **推荐**：通过环境变量 `PORTFOLIO_FILE` 显式指定文件路径（如 `export PORTFOLIO_FILE="$HOME/Documents/portfolio.csv"`），避免路径查找不确定性。
+
+**portfolio.csv 不存在时**，引导用户创建：
 ```
-未找到自选股文件。请参考以下步骤创建：
+未找到自选股文件。请执行以下步骤创建：
 
-1. 复制模板文件：
-   cp {skill_dir}/examples/portfolio.csv {skill_dir}/portfolio.csv
+1. 复制模板文件（路径替换为你的实际安装目录）：
+   cp ~/.openclaw/workspace/skills/stock-query/examples/portfolio.csv \
+      ~/.openclaw/workspace/skills/stock-query/portfolio.csv
 
-2. 编辑文件，填入您的自选股和持仓信息。
+2. 编辑文件，填入你的自选股和持仓信息。
 
-3. 再次运行本命令即可。
+3. 或直接设置 PORTFOLIO_FILE 指向已有文件路径。
 ```
 
 **CSV 文件格式**（参考 `examples/portfolio.csv`）：
@@ -478,13 +510,13 @@ AAPL,,50,220.00             # 名称留空：自动从接口获取
 
 ### 查
 
-**必须执行以下命令，不得使用会话记忆代替：**
+**必须执行以下命令读取文件，不得使用会话记忆代替：**
 
 ```bash
-bash {script_path} list
+grep -v '^#' "$PFILE" | tail -n +2
 ```
 
-脚本输出原始 CSV，将其格式化为表格展示：
+将输出格式化为表格展示：
 
 ```
 | 代码   | 名称        | 持仓  | 成本价 |
@@ -501,51 +533,73 @@ bash {script_path} list
 1. 调用腾讯 API（Step 3a）获取名称
 2. **必须通过 Bash 工具执行：**
 ```bash
-bash {script_path} add {code} --name "{name}" --shares {shares} --cost {cost}
+if grep -q "^{code}," "$PFILE" 2>/dev/null; then
+  echo "DUPLICATE:{code}"
+else
+  echo "{code},{name},{shares},{cost}" >> "$PFILE" && echo "ADDED:{code},{name},{shares},{cost}"
+fi
 ```
 3. 解析输出：
-   - `ADDED:{row}` → 展示添加结果：
+   - `ADDED:...` → 展示添加结果：
      ```
      ✅ 已添加：
      + | {code} | {name} | {shares} | {cost} |
      ```
-   - `ERROR:DUPLICATE:{code}` → 提示："代码 {code} 已在自选股中，是否改为修改操作？"
+   - `DUPLICATE:{code}` → 提示："代码 {code} 已在自选股中，是否改为修改操作？"
 
 ### 改
 
 1. 调用腾讯 API 获取最新名称（同步更新）
 2. **必须通过 Bash 工具执行：**
 ```bash
-bash {script_path} edit {code} --name "{name}" [--shares {shares}] [--cost {cost}]
+OLD=$(grep "^{code}," "$PFILE")
+if [ -z "$OLD" ]; then
+  echo "NOT_FOUND:{code}"
+else
+  NEW="{code},{name},{shares},{cost}"
+  tmp=$(mktemp)
+  awk -F',' -v c="{code}" -v n="$NEW" \
+    'BEGIN{OFS=","} $1==c{print n;next}{print}' "$PFILE" > "$tmp" && mv "$tmp" "$PFILE"
+  echo "BEFORE:$OLD"
+  echo "AFTER:$NEW"
+fi
 ```
 3. 解析输出：
-   - `BEFORE:{old_row}` + `AFTER:{new_row}` → 展示 diff：
+   - `BEFORE:...` + `AFTER:...` → 展示 diff：
      ```
      ✅ 已修改：
      - | 601991 | 大唐发电 | 1000 | 4.00 |
      + | 601991 | 大唐发电 | 1500 | 4.20 |
      ```
-   - `ERROR:NOT_FOUND:{code}` → 提示未找到该代码
+   - `NOT_FOUND:{code}` → 提示未找到该代码
 
 ### 删
 
 **必须通过 Bash 工具执行：**
 ```bash
-bash {script_path} delete {code}
+DEL=$(grep "^{code}," "$PFILE")
+if [ -z "$DEL" ]; then
+  echo "NOT_FOUND:{code}"
+else
+  tmp=$(mktemp)
+  grep -v "^{code}," "$PFILE" > "$tmp" && mv "$tmp" "$PFILE"
+  echo "DELETED:$DEL"
+fi
 ```
 
 解析输出：
-- `DELETED:{row}` → 展示删除结果：
+- `DELETED:...` → 展示删除结果：
   ```
   ✅ 已删除：
   - | {code} | {name} | {shares} | {cost} |
   ```
-- `ERROR:NOT_FOUND:{code}` → 提示未找到该代码
+- `NOT_FOUND:{code}` → 提示未找到该代码
 
 ## 数据源降级策略
 
 - A 股（股票/ETF/指数）：腾讯财经（首选）→ 新浪财经（备用）→ 报错
-- 港股/美股：腾讯财经（唯一数据源）→ 报错
+- 港股：腾讯财经（首选）→ 东方财富 `116.xxxxx`（备用）→ 报错
+- 美股：腾讯财经（首选）→ 东方财富 `105./106.TICKER`（备用）→ 报错
 - 场外基金：天天基金估值（首选）→ 东方财富净值（备用）→ 报错
 
 ## 错误处理
@@ -553,7 +607,7 @@ bash {script_path} delete {code}
 | 场景              | 处理方式                                                     |
 |------------------|--------------------------------------------------------------|
 | 代码无法识别       | 提示 "未找到标的 {code}，请确认代码是否正确"                      |
-| 腾讯接口超时/空值  | A 股自动回退新浪；港股/美股提示 "数据源暂时不可用"                 |
+| 腾讯接口超时/空值  | A 股自动回退新浪；港股/美股自动回退东方财富（Step 3c）             |
 | 新浪接口也失败     | 重试 1 次，仍失败则提示 "数据源暂时不可用，请稍后重试"              |
 | 场外基金无估值数据  | 回退到确认净值接口，标注 `（净值，非估值）`                        |
 | 市场前缀碰撞       | 校验返回名称与用户预期是否一致，不一致时尝试另一市场前缀             |
@@ -561,13 +615,14 @@ bash {script_path} delete {code}
 
 ## 安全与隐私说明
 
-- **网络请求范围**：本 skill 仅访问以下四个公开行情数据源，请求内容仅含股票代码，不包含用户身份信息：
+- **网络请求范围**：本 skill 仅访问以下五个公开行情数据源，请求内容仅含股票代码，不包含用户身份信息：
   - `qt.gtimg.cn`（腾讯财经，A股/港股/美股，HTTPS）
   - `hq.sinajs.cn`（新浪财经，A股备用，HTTPS）
+  - `push2.eastmoney.com`（东方财富行情，港股/美股备用，HTTPS）
   - `fundgz.1234567.com.cn`（天天基金估值，HTTP 无 TLS，仅发送基金代码）
   - `api.fund.eastmoney.com`（东方财富净值，HTTPS）
-- **PORTFOLIO_FILE 环境变量**：由 `config.portfolio_file` 配置项映射，作为可选路径覆盖传递给 `portfolio.sh`。脚本仅在此变量非空且指向有效文件时使用；否则在默认安装目录下查找 `portfolio.csv`。
-- **文件操作约束**：`portfolio.sh` 仅读写 `portfolio.csv` 一个文件，且所有操作须用户显式发起。脚本不会自动运行、不会扫描目录、不会访问其他文件。
+- **PORTFOLIO_FILE 环境变量**：由 `config.portfolio_file` 配置项映射，优先作为 `portfolio.csv` 的文件路径；未设置时在默认安装目录下查找。推荐显式配置以避免路径查找不确定性。
+- **文件操作约束**：Command 3 仅读写 `portfolio.csv` 一个文件（路径由 `PORTFOLIO_FILE` 或默认目录决定），所有操作须用户显式发起，不会自动运行、不会扫描目录、不会访问其他文件。
 - **持仓数据与网络请求的关系**：持仓查询时，agent 仅将 portfolio.csv 中的股票代码传递给行情 API；成本价等敏感列不会发送至网络。
 - **凭证隔离**：`portfolio.csv` 与 `PORTFOLIO_FILE` 指向的文件**仅应包含股票代码和持仓数据**，切勿存放账户密码、API 密钥、Token 或任何认证凭证。
 
