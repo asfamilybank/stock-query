@@ -25,11 +25,6 @@
 - 注意：两个 SKILL.md 的 Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），bump 时需用 `replace_all` 一并替换
 - **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有实质功能变化时才执行；`claude/` 目录的改动不需要触发 ClawHub 发布
 
-### ClawHub 安全扫描注意事项
-
-- 扫描器对比 SKILL.md 正文内容与元数据声明；SKILL.md 中使用的命令行工具必须在正文"前置依赖"章节明确列出
-- `skill.yaml requires.bins` 只列 skill 指令实际调用的二进制（`curl`、`iconv`）；`scripts/` 独立脚本的依赖（如 `bc`）不属于 skill 依赖，不要列入
-
 ### ClawHub 发布流程
 
 ```bash
