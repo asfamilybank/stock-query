@@ -1,6 +1,6 @@
 ---
 name: stock-query
-version: 2.1.1
+version: 2.1.2
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及场内 ETF、场外基金、主要指数。
   需要：curl（HTTP 请求）、iconv（GBK→UTF-8 转码）。
@@ -29,6 +29,20 @@ allowed-tools:
 | 美股     | 英文 ticker（如 AAPL）    | `us`        | 腾讯财经     | —           |
 | 美股指数  | .DJI / .IXIC / .SPX     | `us`        | 腾讯财经     | —           |
 
+## 权限与操作范围
+
+| 权限 | 声明用途 | 限制 |
+|------|---------|------|
+| `Bash` | curl / iconv / portfolio.sh | 仅执行已声明操作：行情查询转码、portfolio.csv 增删改查；不执行任意命令 |
+
+**网络访问：** 仅限 `qt.gtimg.cn`、`hq.sinajs.cn`、`fundgz.1234567.com.cn`、`api.fund.eastmoney.com` 四个行情数据源，不发送用户个人数据。
+
+**文件访问：** 本 skill 仅在用户**显式指令**下，通过 `portfolio.sh` 读写 `portfolio.csv` 一个文件。文件路径由 `PORTFOLIO_FILE` 环境变量（对应 `config.portfolio_file` 配置项）指定；未配置时在 skill 默认安装目录下查找。不访问其他系统文件。
+
+**自动触发范围：** 关键词匹配触发行情查询（Command 2）。**文件操作（Command 3）不会自动触发**，仅在用户明确发出增/删/改/查 portfolio 指令时执行。
+
+⚠️ **凭证安全：** `portfolio.csv` 仅应包含股票代码、名称、持仓数量、成本价。**禁止在 portfolio.csv 或 `PORTFOLIO_FILE` 指向的文件中存放账户密码、API 密钥、Token 或任何认证凭证。**
+
 ## 工作流程
 
 ### Step 0: 意图识别与 Command 路由
@@ -40,12 +54,12 @@ allowed-tools:
 
 version 输出：
 ```
-stock-query v2.1.1
+stock-query v2.1.2
 ```
 
 help 输出：
 ```
-stock-query v2.1.1 — 全球股票/ETF/基金/指数实时行情查询
+stock-query v2.1.2 — 全球股票/ETF/基金/指数实时行情查询
 
 用法：
   /stock-query <代码> [代码2 ...]   查询一个或多个标的
@@ -547,8 +561,15 @@ bash {script_path} delete {code}
 
 ## 安全与隐私说明
 
-- **场外基金估值接口（fundgz.1234567.com.cn）**：当前仅提供 HTTP（无 TLS）。请求中仅发送基金代码，不涉及用户身份或敏感数据。
-- **portfolio_file 配置**：`skill.yaml` 中为可选配置项，指向 CSV 格式的自选股/持仓文件。默认路径为 skill 安装目录下的 `portfolio.csv`（格式参见同目录 `examples/portfolio.csv`）。**本 skill 附带的脚本不会自动读取该路径**；若配置此项，agent 可能在用户指令下读取该文件。⚠️ 本 skill 同时具有 shell 和 network 权限，理论上读取的文件内容可被纳入网络请求（如查询持仓数据时）。**请勿将此项指向包含账户凭证、API 密钥或其他敏感信息的文件。**
+- **网络请求范围**：本 skill 仅访问以下四个公开行情数据源，请求内容仅含股票代码，不包含用户身份信息：
+  - `qt.gtimg.cn`（腾讯财经，A股/港股/美股，HTTPS）
+  - `hq.sinajs.cn`（新浪财经，A股备用，HTTPS）
+  - `fundgz.1234567.com.cn`（天天基金估值，HTTP 无 TLS，仅发送基金代码）
+  - `api.fund.eastmoney.com`（东方财富净值，HTTPS）
+- **PORTFOLIO_FILE 环境变量**：由 `config.portfolio_file` 配置项映射，作为可选路径覆盖传递给 `portfolio.sh`。脚本仅在此变量非空且指向有效文件时使用；否则在默认安装目录下查找 `portfolio.csv`。
+- **文件操作约束**：`portfolio.sh` 仅读写 `portfolio.csv` 一个文件，且所有操作须用户显式发起。脚本不会自动运行、不会扫描目录、不会访问其他文件。
+- **持仓数据与网络请求的关系**：持仓查询时，agent 仅将 portfolio.csv 中的股票代码传递给行情 API；成本价等敏感列不会发送至网络。
+- **凭证隔离**：`portfolio.csv` 与 `PORTFOLIO_FILE` 指向的文件**仅应包含股票代码和持仓数据**，切勿存放账户密码、API 密钥、Token 或任何认证凭证。
 
 ## 交易时间参考
 

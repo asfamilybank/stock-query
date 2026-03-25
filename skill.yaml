@@ -1,9 +1,12 @@
 name: stock-query
-version: 2.1.1
+version: 2.1.2
 author: asfamilybank
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及 ETF、场外基金、主要指数，支持批量查询和持仓市值计算。
-  需要：curl（HTTP 请求）、iconv（GBK→UTF-8 转码）。
+  同时支持在用户显式指令下通过 portfolio.sh 管理本地 portfolio.csv 自选股/持仓文件（增/删/改/查），文件仅含股票代码、名称、持仓、成本价，禁止存放账户凭证或密钥。
+  需要：curl（行情 API 请求）、iconv（GBK→UTF-8 转码）。
+  文件访问：仅限 portfolio.csv（路径由 PORTFOLIO_FILE 环境变量或默认安装目录决定），不访问其他系统文件。
+  网络访问：仅限 qt.gtimg.cn、hq.sinajs.cn、fundgz.1234567.com.cn、api.fund.eastmoney.com 四个行情数据源。
   Use when: 用户提到"查股价""查净值""行情""最新价""持仓市值""实时价格""大盘""指数""港股""美股"等。
   NOT for: 加密货币、期货、期权、外汇。
 emoji: "📈"
@@ -14,15 +17,21 @@ license: MIT
 repository: https://github.com/asfamilybank/stock-query
 
 permissions:
-  - network
-  - shell
+  - network  # 用途：curl 调用行情 API（仅限 qt.gtimg.cn / hq.sinajs.cn / fundgz.1234567.com.cn / api.fund.eastmoney.com）
+  - shell    # 用途：执行 curl、iconv 转码、portfolio.sh 脚本（仅操作 portfolio.csv，不执行任意命令）
+
+env:
+  PORTFOLIO_FILE:
+    description: "portfolio.csv 文件绝对路径（可选）。与 config.portfolio_file 对应，优先级高于默认安装目录查找。仅应指向纯股票数据文件，禁止指向含凭证或密钥的文件。"
+    required: false
+    default: ""
 
 config:
   portfolio_file:
     type: string
     required: false
     default: ""
-    description: "可选：自选股/持仓文件路径（CSV 格式，格式参见同目录 examples/portfolio.csv）。留空时使用 skill 安装目录下的 portfolio.csv；文件不存在时 skill 会引导用户从 examples/portfolio.csv 复制创建。配置后，当用户查询持仓或自选股行情时，agent 会读取此文件并批量查询。格式：代码,名称,持仓,成本价（名称/持仓/成本价均可留空）。⚠️ 安全提示：本 skill 具有 shell + network 权限，若配置此项，agent 可能在用户指令下读取该文件并通过网络请求传递内容（例如在持仓查询中带入文件数据）。请勿指向含账户凭证、密钥或其他敏感信息的文件。"
+    description: "可选：自选股/持仓文件路径（CSV 格式，格式参见同目录 examples/portfolio.csv）。设置后将作为 PORTFOLIO_FILE 环境变量传递给 portfolio.sh。留空时 portfolio.sh 在默认安装目录（~/.openclaw/workspace/skills/stock-query/ 或 ~/.claude/skills/stock-query/）下查找 portfolio.csv；文件不存在时 skill 会引导用户从 examples/portfolio.csv 复制创建。文件操作仅在用户显式指令下执行。⚠️ 安全提示：本 skill 具有 shell + network 权限，请勿将此项指向含账户凭证、API 密钥或其他敏感信息的文件。"
 
 entryPoint:
   type: natural
