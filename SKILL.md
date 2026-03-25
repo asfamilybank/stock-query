@@ -1,13 +1,23 @@
 ---
 name: stock-query
-version: 2.0.2
+version: 2.0.5
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及场内 ETF、场外基金、主要指数。
+  需要：curl（HTTP 请求）、iconv（GBK→UTF-8 转码）。
   Use when: 用户要求查询股价、基金净值、ETF 价格、大盘指数，或需要计算持仓市值时。
   NOT for: 加密货币、期货、期权、外汇。
 ---
 
 # 全球股票/ETF/基金/指数 实时价格查询
+
+## 前置依赖
+
+运行本 skill 需要以下命令行工具：
+
+| 工具 | 用途 |
+|------|------|
+| `curl` | 调用股票行情 API |
+| `iconv` | 将 API 响应从 GBK 转码为 UTF-8 |
 
 ## 支持的市场与标的
 
@@ -25,6 +35,44 @@ description: >
 | 美股指数  | .DJI / .IXIC / .SPX     | `us`        | 腾讯财经     | —           |
 
 ## 工作流程
+
+### Step 0: Meta 命令路由
+
+在解析标的代码前，先检查用户输入是否为 meta 命令：
+
+**version 命令**：输入为 `version`、`-v`、`--version`（大小写不敏感）
+→ 直接输出版本信息，**不执行后续步骤**：
+
+```
+stock-query v2.0.4
+```
+
+**help 命令**：输入为 `help`、`-h`、`--help`（大小写不敏感）
+→ 直接输出用法说明，**不执行后续步骤**：
+
+```
+stock-query v2.0.4 — 全球股票/ETF/基金/指数实时行情查询
+
+用法：
+  /stock-query <代码> [代码2 ...]   查询一个或多个标的
+  /stock-query version              显示版本号
+  /stock-query help                 显示本帮助
+
+支持的市场：
+  A股（沪/深）  6位数字，如 601991 000001
+  港股          5位数字，如 00700 09988
+  美股          英文ticker，如 AAPL TSLA NVDA
+  美股指数      .DJI  .IXIC  .SPX
+  ETF           6位数字，如 510300 159915
+  场外基金      6位数字，如 014978
+
+常用示例：
+  /stock-query AAPL
+  /stock-query 00700 09988
+  /stock-query AAPL 00700 601991 510300
+```
+
+---
 
 ### Step 1: 解析用户输入
 
@@ -275,7 +323,54 @@ curl -s "https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pag
 
 ### Step 6: 持仓市值计算（可选）
 
-如果用户同时提供了持仓份额/股数，额外输出市值表：
+#### 6a. 从 portfolio_file 加载
+
+当用户指令涉及持仓/自选股（如"查我的持仓""看下自选股""今天行情怎么样"），读取自选股文件并批量查询。
+
+**默认文件路径：**
+- 全局安装：`~/.claude/skills/stock-query/portfolio.csv`
+- 项目安装：`.claude/skills/stock-query/portfolio.csv`
+
+若 `portfolio_file` 有显式配置，优先使用配置路径。
+
+**文件不存在时的处理：**
+
+告知用户文件尚未创建，并给出引导：
+
+```
+未找到自选股文件。请参考以下步骤创建：
+
+1. 复制模板文件：
+   cp ~/.claude/skills/stock-query/examples/portfolio.csv \
+      ~/.claude/skills/stock-query/portfolio.csv
+
+2. 编辑文件，填入您的自选股和持仓信息。
+
+3. 再次运行本命令即可查询。
+```
+
+**CSV 文件格式**（参考 `examples/portfolio.csv`）：
+
+```
+代码,名称,持仓,成本价
+601991,大唐发电,1000,4.00   # 含持仓与成本，输出浮盈亏
+510300,沪深300ETF,5000,4.10
+014978,华安纳指100C,10000,  # 成本价留空：只查行情，不算浮盈亏
+00700,腾讯控股,100,480.00
+AAPL,,50,220.00             # 名称留空：自动从接口获取
+000300,,0,                  # 持仓为 0：纯自选，不计算市值
+```
+
+解析规则：
+- 以 `#` 开头的行为注释，忽略
+- 第一个非注释行为表头，忽略
+- 名称列为空 → 查询后自动填充
+- 持仓为 0 或空 → 只输出行情表，不输出市值表
+- 成本价为空 → 市值表中浮盈亏列显示 `—`
+
+#### 6b. 用户手动提供持仓信息
+
+如果用户在消息中直接提供了持仓份额/股数，额外输出市值表：
 
 ```
 | 代码   | 名称      | 持仓   | 成本价  | 最新价  | 市值       | 浮盈/亏         | 盈亏比          |
@@ -311,7 +406,7 @@ curl -s "https://api.fund.eastmoney.com/f10/lsjz?fundCode={code}&pageIndex=1&pag
 ## 安全与隐私说明
 
 - **场外基金估值接口（fundgz.1234567.com.cn）**：当前仅提供 HTTP（无 TLS）。请求中仅发送基金代码，不涉及用户身份或敏感数据。
-- **portfolio_file 配置**：`skill.yaml` 中为可选配置项。**本 skill 附带的脚本不会自动读取该路径**；若配置此项，agent 可能按用户指令读取。请勿指向含敏感信息的文件。
+- **portfolio_file 配置**：`skill.yaml` 中为可选配置项，指向 CSV 格式的自选股/持仓文件。默认路径为 skill 安装目录下的 `portfolio.csv`（格式参见同目录 `examples/portfolio.csv`）。**本 skill 附带的脚本不会自动读取该路径**；若配置此项，agent 可能在用户指令下读取该文件。⚠️ 本 skill 同时具有 shell 和 network 权限，理论上读取的文件内容可被纳入网络请求（如查询持仓数据时）。**请勿将此项指向包含账户凭证、API 密钥或其他敏感信息的文件。**
 
 ## 交易时间参考
 

@@ -9,6 +9,7 @@ REPO="asfamilybank/stock-query"
 BRANCH="main"
 SKILL_NAME="stock-query"
 SKILL_FILE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/claude/SKILL.md"
+EXAMPLES_PORTFOLIO_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/examples/portfolio.csv"
 
 # Parse args
 PROJECT_INSTALL=false
@@ -43,14 +44,14 @@ extract_version() {
   grep '^version:' "$1" 2>/dev/null | awk '{print $2}' | tr -d '"'
 }
 
-# Download remote SKILL.md to temp file
-TMP_FILE="$(mktemp)"
-trap 'rm -f "${TMP_FILE}"' EXIT
+TMP_SKILL="$(mktemp)"
+TMP_PORTFOLIO="$(mktemp)"
+trap 'rm -f "${TMP_SKILL}" "${TMP_PORTFOLIO}"' EXIT
 
 echo "正在获取最新版本信息..."
-curl -fsSL "${SKILL_FILE_URL}" -o "${TMP_FILE}"
+curl -fsSL "${SKILL_FILE_URL}" -o "${TMP_SKILL}"
 
-REMOTE_VERSION="$(extract_version "${TMP_FILE}")"
+REMOTE_VERSION="$(extract_version "${TMP_SKILL}")"
 REMOTE_VERSION="${REMOTE_VERSION:-unknown}"
 
 LOCAL_SKILL="${INSTALL_DIR}/SKILL.md"
@@ -65,16 +66,20 @@ if [ -f "${LOCAL_SKILL}" ]; then
 
   if [ "${LOCAL_VERSION}" != "unknown" ] && [ "${LOCAL_VERSION}" = "${REMOTE_VERSION}" ]; then
     echo "已是最新版本，无需更新。"
-    exit 0
+  else
+    cp "${TMP_SKILL}" "${LOCAL_SKILL}"
+    echo "已更新至最新版本 v${REMOTE_VERSION}（原版本 v${LOCAL_VERSION}）"
   fi
-
-  cp "${TMP_FILE}" "${LOCAL_SKILL}"
-  echo "已更新至最新版本 v${REMOTE_VERSION}（原版本 v${LOCAL_VERSION}）"
 else
   mkdir -p "${INSTALL_DIR}"
-  cp "${TMP_FILE}" "${LOCAL_SKILL}"
+  cp "${TMP_SKILL}" "${LOCAL_SKILL}"
   echo "已安装 stock-query v${REMOTE_VERSION}（${SCOPE}）"
   echo ""
   echo "使用方式："
   echo "  /stock-query AAPL 00700 601991"
 fi
+
+# 安装/更新 examples/ 目录
+curl -fsSL "${EXAMPLES_PORTFOLIO_URL}" -o "${TMP_PORTFOLIO}"
+mkdir -p "${INSTALL_DIR}/examples"
+cp "${TMP_PORTFOLIO}" "${INSTALL_DIR}/examples/portfolio.csv"
