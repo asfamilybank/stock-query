@@ -1,5 +1,5 @@
 name: stock-query
-version: 2.2.0
+version: 2.2.1
 author: asfamilybank
 description: >
   查询全球主要市场股票实时行情：A 股、港股、美股，以及 ETF、场外基金、主要指数，支持批量查询和持仓市值计算。
