@@ -1,0 +1,620 @@
+#!/usr/bin/env bash
+# sq — stock-query 数据层 CLI
+# 用法: sq get <code> [code...]
+# 输出: JSON 数组，每个元素对应一个标的的实时行情
+#
+# JSON 字段说明:
+#   code          用户输入的原始代码
+#   name          标的名称
+#   market        A股 | 港股 | 美股 | 基金
+#   type          stock | etf | index | fund
+#   currency      CNY | HKD | USD
+#   price         最新价（数值）
+#   prev_close    昨收
+#   open          今开
+#   high          最高
+#   low           最低
+#   change        涨跌额
+#   change_pct    涨跌幅数值（正=涨，负=跌，单位%）
+#   direction     up | down | flat
+#   volume        成交量（A股单位手，美股单位股）
+#   amount        成交额（万元，A股；其他市场可能为 null）
+#   turnover      换手率（%，A股/港股有效）
+#   pe            市盈率（A股有效）
+#   week52_high   52周最高价
+#   week52_low    52周最低价
+#   datetime      行情时间（YYYY-MM-DD HH:MM:SS）
+#   is_estimate   基金：true=今日估算净值，false=确认净值
+#   nav_date      基金：净值日期
+#   is_qdii       基金：是否为QDII基金（净值有延迟）
+#   error         查询失败时的错误信息，成功时为 null
+
+set -uo pipefail
+
+TIMEOUT=8
+TODAY=$(date +%Y-%m-%d)
+_RESULTS_DIR=$(mktemp -d)
+trap 'rm -rf "$_RESULTS_DIR"' EXIT INT TERM
+
+# ── JSON 工具 ──────────────────────────────────────────────────────────────────
+
+_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+jstr() { [[ -z "${1:-}" ]] && printf 'null' || printf '"%s"' "$(_esc "$1")"; }
+jnum() {
+  local v="${1:-}"
+  [[ -z "$v" || "$v" == "-" || "$v" == "--" ]] && printf 'null' || printf '%s' "$v"
+}
+jbool() { [[ "${1:-false}" == "true" ]] && printf 'true' || printf 'false'; }
+
+direction_of() {
+  local pct="${1:-}"
+  [[ -z "$pct" ]] && { printf 'flat'; return; }
+  if command -v bc &>/dev/null; then
+    if (( $(echo "${pct} > 0" | bc -l 2>/dev/null || echo 0) )); then
+      printf 'up'
+    elif (( $(echo "${pct} < 0" | bc -l 2>/dev/null || echo 0) )); then
+      printf 'down'
+    else
+      printf 'flat'
+    fi
+  else
+    printf 'flat'
+  fi
+}
+
+# ── eval-based 映射（bash 3.x 兼容替代 declare -A）───────────────────────────
+
+# key → 去掉非 alnum 字符，保证变量名合法
+_mkey() { printf '%s' "$1" | tr -cs 'a-zA-Z0-9' '_'; }
+
+# _mset NAMESPACE KEY VALUE  /  _mget NAMESPACE KEY  /  _mhas NAMESPACE KEY
+_mset() { local _k; _k=$(_mkey "$2"); eval "_m_${1}_${_k}=\$3"; }
+_mget() { local _k; _k=$(_mkey "$2"); eval "printf '%s' \"\${_m_${1}_${_k}:-}\""; }
+_mhas() { local _k; _k=$(_mkey "$2"); eval "[[ -n \"\${_m_${1}_${_k}:-}\" ]]"; }
+
+# ── 市场识别 ──────────────────────────────────────────────────────────────────
+
+# 沪市指数白名单（000开头）
+_SH_IDX=" 000001 000010 000015 000016 000300 000688 000852 000903 000905 000906 000985 "
+
+# 输出: "{market}:{sym}:{type}"
+# market: sh | sz | hk | us | fund | probe | error
+# probe 表示需要通过腾讯响应验证（深市股票 or 场外基金）
+classify_code() {
+  local raw="$1"
+
+  # 美股指数别名：腾讯 API 实际 symbol 与通用写法不一致时在此映射
+  case "$raw" in
+    .SPX|.SP500) raw=".INX" ;;
+  esac
+
+  # 显式市场前缀 sh/sz + 6位数字（优先于字母→美股判断）
+  if [[ "$raw" =~ ^(sh|sz)([0-9]{6})$ ]]; then
+    local _pfx="${BASH_REMATCH[1]}" _code="${BASH_REMATCH[2]}"
+    local _type
+    case "$_pfx" in
+      sh)
+        case "${_code:0:1}" in
+          6) _type="stock" ;;
+          5) _type="etf"   ;;
+          0|3)
+            if [[ "$_SH_IDX" == *" $_code "* ]]; then _type="index"
+            else _type="stock"; fi
+            ;;
+          *) _type="stock" ;;
+        esac
+        ;;
+      sz)
+        case "${_code:0:3}" in
+          399) _type="index" ;;
+          *)
+            case "${_code:0:1}" in
+              1) _type="etf"   ;;
+              *) _type="stock" ;;
+            esac
+            ;;
+        esac
+        ;;
+    esac
+    printf '%s:%s:%s' "$_pfx" "$_code" "$_type"; return
+  fi
+
+  if [[ "$raw" =~ ^\.[A-Z]+$ ]]; then
+    printf 'us:%s:index' "$raw"; return
+  fi
+  if [[ "$raw" =~ ^[A-Za-z] ]]; then
+    printf 'us:%s:stock' "$(printf '%s' "$raw" | tr '[:lower:]' '[:upper:]')"; return
+  fi
+  if [[ "$raw" =~ ^[0-9]{1,5}$ ]]; then
+    printf 'hk:%05d:stock' "$((10#$raw))"; return
+  fi
+  if [[ "$raw" =~ ^[0-9]{6}$ ]]; then
+    case "${raw:0:1}" in
+      6) printf 'sh:%s:stock' "$raw" ;;
+      5) printf 'sh:%s:etf'   "$raw" ;;
+      1) printf 'sz:%s:etf'   "$raw" ;;
+      0|3)
+        if [[ "$_SH_IDX" == *" $raw "* ]]; then
+          printf 'sh:%s:index' "$raw"
+        elif [[ "${raw:0:3}" == "399" ]]; then
+          printf 'sz:%s:index' "$raw"
+        else
+          printf 'probe:sz:%s:stock' "$raw"
+        fi
+        ;;
+      2|4|7|8|9) printf 'fund:%s:fund' "$raw" ;;
+      *) printf 'error:%s' "$raw" ;;
+    esac
+    return
+  fi
+  printf 'error:%s' "$raw"
+}
+
+# ── 错误对象 ──────────────────────────────────────────────────────────────────
+
+error_obj() {
+  local code="$1" msg="$2"
+  printf '{"code":%s,"name":null,"market":null,"type":null,"currency":null,' "$(jstr "$code")"
+  printf '"price":null,"prev_close":null,"open":null,"high":null,"low":null,'
+  printf '"change":null,"change_pct":null,"direction":null,'
+  printf '"volume":null,"amount":null,"turnover":null,"pe":null,'
+  printf '"week52_high":null,"week52_low":null,"datetime":null,'
+  printf '"is_estimate":false,"nav_date":null,"is_qdii":false,"error":%s}' "$(jstr "$msg")"
+}
+
+# 将结果写到临时文件（按 index），避免 bash 变量特殊字符问题
+save_result() { printf '%s' "$2" > "${_RESULTS_DIR}/${1}"; }
+load_result() { cat "${_RESULTS_DIR}/${1}" 2>/dev/null; }
+
+# ── 腾讯财经 API ───────────────────────────────────────────────────────────────
+
+tencent_fetch() {
+  curl -s -m "$TIMEOUT" "https://qt.gtimg.cn/q=$1" | iconv -f GBK -t UTF-8 2>/dev/null
+}
+
+tencent_api_code_of() {
+  printf '%s' "$1" | grep -oE 'v_[a-zA-Z]+[A-Za-z0-9.]+' | head -1 | sed 's/^v_//'
+}
+
+tencent_line_valid() {
+  local data
+  data=$(printf '%s' "$1" | cut -d'"' -f2)
+  [[ -z "$data" ]] && return 1
+  local name latest
+  name=$(printf '%s' "$data" | cut -d'~' -f2)
+  latest=$(printf '%s' "$data" | cut -d'~' -f4)
+  [[ -n "$name" && -n "$latest" && "$name" != "" && "$latest" != "" ]]
+}
+
+parse_tencent() {
+  local line="$1" user_code="$2" type="$3"
+  local data
+  data=$(printf '%s' "$line" | cut -d'"' -f2)
+  [[ -z "$data" ]] && return 1
+
+  # IFS='~' 读字段
+  local name prev_close open latest change change_pct high low volume
+  local amount turnover pe week52_high week52_low dt market_id
+  name=$(        printf '%s' "$data" | cut -d'~' -f2)
+  latest=$(      printf '%s' "$data" | cut -d'~' -f4)
+  [[ -z "$name" || -z "$latest" ]] && return 1
+
+  market_id=$(   printf '%s' "$data" | cut -d'~' -f1)
+  prev_close=$(  printf '%s' "$data" | cut -d'~' -f5)
+  open=$(        printf '%s' "$data" | cut -d'~' -f6)
+  volume=$(      printf '%s' "$data" | cut -d'~' -f7)
+  change=$(      printf '%s' "$data" | cut -d'~' -f32)
+  change_pct=$(  printf '%s' "$data" | cut -d'~' -f33)
+  high=$(        printf '%s' "$data" | cut -d'~' -f34)
+  low=$(         printf '%s' "$data" | cut -d'~' -f35)
+  amount=$(      printf '%s' "$data" | cut -d'~' -f38)
+  turnover=$(    printf '%s' "$data" | cut -d'~' -f39)
+  pe=$(          printf '%s' "$data" | cut -d'~' -f40)
+  week52_high=$( printf '%s' "$data" | cut -d'~' -f42)
+  week52_low=$(  printf '%s' "$data" | cut -d'~' -f43)
+  dt=$(          printf '%s' "$data" | cut -d'~' -f31)
+
+  # A股时间 YYYYMMDDHHMMSS → YYYY-MM-DD HH:MM:SS
+  if [[ ${#dt} -eq 14 && "$dt" =~ ^[0-9]+$ ]]; then
+    dt="${dt:0:4}-${dt:4:2}-${dt:6:2} ${dt:8:2}:${dt:10:2}:${dt:12:2}"
+  fi
+
+  local market currency
+  case "$market_id" in
+    1|51) market="A股"; currency="CNY" ;;
+    100)  market="港股"; currency="HKD" ;;
+    200)  market="美股"; currency="USD" ;;
+    *)    market="—";   currency="—"   ;;
+  esac
+
+  local dir; dir=$(direction_of "$change_pct")
+
+  printf '{"code":%s,"name":%s,"market":%s,"type":%s,"currency":%s,' \
+    "$(jstr "$user_code")" "$(jstr "$name")" "$(jstr "$market")" "$(jstr "$type")" "$(jstr "$currency")"
+  printf '"price":%s,"prev_close":%s,"open":%s,"high":%s,"low":%s,' \
+    "$(jnum "$latest")" "$(jnum "$prev_close")" "$(jnum "$open")" "$(jnum "$high")" "$(jnum "$low")"
+  printf '"change":%s,"change_pct":%s,"direction":%s,' \
+    "$(jnum "$change")" "$(jnum "$change_pct")" "$(jstr "$dir")"
+  printf '"volume":%s,"amount":%s,"turnover":%s,"pe":%s,' \
+    "$(jnum "$volume")" "$(jnum "$amount")" "$(jnum "$turnover")" "$(jnum "$pe")"
+  printf '"week52_high":%s,"week52_low":%s,"datetime":%s,' \
+    "$(jnum "$week52_high")" "$(jnum "$week52_low")" "$(jstr "$dt")"
+  printf '"is_estimate":false,"nav_date":null,"is_qdii":false,"error":null}'
+  return 0
+}
+
+# ── 新浪财经 API（A股备用）────────────────────────────────────────────────────
+
+sina_fetch() {
+  curl -s -m "$TIMEOUT" "https://hq.sinajs.cn/list=$1" \
+    -H "Referer: https://finance.sina.com.cn" | iconv -f GBK -t UTF-8 2>/dev/null
+}
+
+parse_sina() {
+  local line="$1" user_code="$2" type="$3"
+  local data
+  data=$(printf '%s' "$line" | cut -d'"' -f2)
+  [[ -z "$data" ]] && return 1
+
+  local name prev_close latest open high low volume amount date time
+  name=$(       printf '%s' "$data" | cut -d',' -f1)
+  open=$(       printf '%s' "$data" | cut -d',' -f2)
+  prev_close=$( printf '%s' "$data" | cut -d',' -f3)
+  latest=$(     printf '%s' "$data" | cut -d',' -f4)
+  high=$(       printf '%s' "$data" | cut -d',' -f5)
+  low=$(        printf '%s' "$data" | cut -d',' -f6)
+  volume=$(     printf '%s' "$data" | cut -d',' -f9)
+  amount=$(     printf '%s' "$data" | cut -d',' -f10)
+  date=$(       printf '%s' "$data" | cut -d',' -f31)
+  time=$(       printf '%s' "$data" | cut -d',' -f32)
+
+  [[ -z "$name" || -z "$latest" ]] && return 1
+
+  local change="" change_pct="" dir="flat"
+  if command -v bc &>/dev/null && [[ -n "$prev_close" && "$prev_close" != "0.000" ]]; then
+    change=$(echo "scale=4; $latest - $prev_close" | bc)
+    change_pct=$(echo "scale=4; ($latest - $prev_close) / $prev_close * 100" | bc | xargs printf "%.4f")
+    dir=$(direction_of "$change_pct")
+  fi
+
+  printf '{"code":%s,"name":%s,"market":"A股","type":%s,"currency":"CNY",' \
+    "$(jstr "$user_code")" "$(jstr "$name")" "$(jstr "$type")"
+  printf '"price":%s,"prev_close":%s,"open":%s,"high":%s,"low":%s,' \
+    "$(jnum "$latest")" "$(jnum "$prev_close")" "$(jnum "$open")" "$(jnum "$high")" "$(jnum "$low")"
+  printf '"change":%s,"change_pct":%s,"direction":%s,' \
+    "$(jnum "$change")" "$(jnum "$change_pct")" "$(jstr "$dir")"
+  printf '"volume":%s,"amount":%s,"turnover":null,"pe":null,' \
+    "$(jnum "$volume")" "$(jnum "$amount")"
+  printf '"week52_high":null,"week52_low":null,"datetime":%s,' \
+    "$(jstr "${date} ${time}")"
+  printf '"is_estimate":false,"nav_date":null,"is_qdii":false,"error":null}'
+  return 0
+}
+
+# ── 东方财富 API（港股/美股备用）─────────────────────────────────────────────
+
+em_stock_fetch() {
+  curl -s -m "$TIMEOUT" \
+    "https://push2.eastmoney.com/api/qt/stock/get?secid=$1&fields=f43,f57,f58,f169,f170,f47&fltt=2"
+}
+
+parse_em_stock() {
+  local resp="$1" user_code="$2" market="$3" currency="$4"
+  [[ "$resp" == *'"data":null'* ]] && return 1
+
+  local name latest change change_pct volume
+  name=$(      printf '%s' "$resp" | grep -o '"f58":"[^"]*"' | head -1 | cut -d'"' -f4)
+  latest=$(    printf '%s' "$resp" | grep -o '"f43":[^,}]*'  | head -1 | cut -d':' -f2)
+  change=$(    printf '%s' "$resp" | grep -o '"f169":[^,}]*' | head -1 | cut -d':' -f2)
+  change_pct=$(printf '%s' "$resp" | grep -o '"f170":[^,}]*' | head -1 | cut -d':' -f2)
+  volume=$(    printf '%s' "$resp" | grep -o '"f47":[^,}]*'  | head -1 | cut -d':' -f2)
+
+  [[ -z "$name" || -z "$latest" ]] && return 1
+
+  local dir; dir=$(direction_of "$change_pct")
+
+  printf '{"code":%s,"name":%s,"market":%s,"type":"stock","currency":%s,' \
+    "$(jstr "$user_code")" "$(jstr "$name")" "$(jstr "$market")" "$(jstr "$currency")"
+  printf '"price":%s,"prev_close":null,"open":null,"high":null,"low":null,' "$(jnum "$latest")"
+  printf '"change":%s,"change_pct":%s,"direction":%s,' \
+    "$(jnum "$change")" "$(jnum "$change_pct")" "$(jstr "$dir")"
+  printf '"volume":%s,"amount":null,"turnover":null,"pe":null,' "$(jnum "$volume")"
+  printf '"week52_high":null,"week52_low":null,"datetime":null,'
+  printf '"is_estimate":false,"nav_date":null,"is_qdii":false,"error":null}'
+  return 0
+}
+
+# ── 场外基金 API ───────────────────────────────────────────────────────────────
+
+query_fund() {
+  local code="$1"
+
+  local resp4a
+  resp4a=$(curl -s -m "$TIMEOUT" "http://fundgz.1234567.com.cn/js/${code}.js")
+
+  local name="" gsz="" gszzl="" gztime="" dwjz="" jzrq=""
+  local use_estimate=false
+
+  if [[ -n "$resp4a" && "$resp4a" != "jsonpgz()" ]]; then
+    name=$(   printf '%s' "$resp4a" | grep -o '"name":"[^"]*"'   | cut -d'"' -f4)
+    gsz=$(    printf '%s' "$resp4a" | grep -o '"gsz":"[^"]*"'    | cut -d'"' -f4)
+    gszzl=$(  printf '%s' "$resp4a" | grep -o '"gszzl":"[^"]*"'  | cut -d'"' -f4)
+    gztime=$( printf '%s' "$resp4a" | grep -o '"gztime":"[^"]*"' | cut -d'"' -f4)
+    dwjz=$(   printf '%s' "$resp4a" | grep -o '"dwjz":"[^"]*"'   | cut -d'"' -f4)
+    jzrq=$(   printf '%s' "$resp4a" | grep -o '"jzrq":"[^"]*"'   | cut -d'"' -f4)
+    [[ "${gztime:0:10}" == "$TODAY" ]] && use_estimate=true
+  fi
+
+  local price="" nav_date="" is_estimate=false change_pct=""
+
+  if [[ "$use_estimate" == "true" ]]; then
+    price="$gsz"; nav_date="$jzrq"; is_estimate=true; change_pct="$gszzl"
+  else
+    local resp4b
+    resp4b=$(curl -s -m "$TIMEOUT" \
+      "https://api.fund.eastmoney.com/f10/lsjz?fundCode=${code}&pageIndex=1&pageSize=1" \
+      -H "Referer: https://fund.eastmoney.com")
+
+    local em_nav em_date em_pct
+    em_nav=$(  printf '%s' "$resp4b" | grep -o '"DWJZ":"[^"]*"'  | head -1 | cut -d'"' -f4)
+    em_date=$( printf '%s' "$resp4b" | grep -o '"FSRQ":"[^"]*"'  | head -1 | cut -d'"' -f4)
+    em_pct=$(  printf '%s' "$resp4b" | grep -o '"JZZZL":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+    if [[ -n "$em_nav" ]]; then
+      price="$em_nav"; nav_date="$em_date"; is_estimate=false; change_pct="$em_pct"
+    elif [[ -n "$dwjz" ]]; then
+      price="$dwjz"; nav_date="$jzrq"; is_estimate=false; change_pct="$gszzl"
+    else
+      error_obj "$code" "基金数据不可用，请稍后重试"; return 0
+    fi
+  fi
+
+  local dir; dir=$(direction_of "$change_pct")
+
+  local is_qdii=false
+  [[ -n "$name" ]] && printf '%s' "$name" | grep -qiE "QDII|纳斯达克|标普|海外|美国|全球" \
+    && is_qdii=true
+
+  printf '{"code":%s,"name":%s,"market":"基金","type":"fund","currency":"CNY",' \
+    "$(jstr "$code")" "$(jstr "$name")"
+  printf '"price":%s,"prev_close":null,"open":null,"high":null,"low":null,' "$(jnum "$price")"
+  printf '"change":null,"change_pct":%s,"direction":%s,' \
+    "$(jnum "$change_pct")" "$(jstr "$dir")"
+  printf '"volume":null,"amount":null,"turnover":null,"pe":null,'
+  printf '"week52_high":null,"week52_low":null,"datetime":%s,' "$(jstr "$gztime")"
+  printf '"is_estimate":%s,"nav_date":%s,"is_qdii":%s,"error":null}' \
+    "$(jbool "$is_estimate")" "$(jstr "$nav_date")" "$(jbool "$is_qdii")"
+}
+
+# ── 主命令: sq get ─────────────────────────────────────────────────────────────
+
+cmd_get() {
+  [[ $# -eq 0 ]] && { printf 'usage: sq get <code> [code...]\n' >&2; exit 1; }
+
+  # 输入数组（保持顺序）
+  local input_codes=("$@")
+  local n=${#input_codes[@]}
+
+  # 并行数组（按 index）
+  local input_cls=()     # classify 结果
+  local input_api=()     # 腾讯 API code（空=不查腾讯）
+  local input_type=()    # stock|etf|index|fund
+  local input_market=()  # sh|sz|hk|us|fund|error
+  local input_sym=()     # 实际符号（去掉前缀）
+  local input_is_probe=() # 1=probe，空=否
+
+  local tencent_api_list=""  # 腾讯批量查询字符串
+  local i
+
+  # ── 1. 分类 ──────────────────────────────────────────────────────────────────
+  for (( i=0; i<n; i++ )); do
+    local raw="${input_codes[$i]}"
+    local cls; cls=$(classify_code "$raw")
+    input_cls+=("$cls")
+
+    # 解析 cls: market:sym:type 或 probe:market:sym:type 或 error:...
+    local market sym type is_probe=""
+    if [[ "$cls" == error:* ]]; then
+      market="error"; sym="$raw"; type="error"
+    elif [[ "$cls" == probe:* ]]; then
+      local rest="${cls#probe:}"           # sz:CODE:stock
+      market="${rest%%:*}"
+      rest="${rest#*:}"
+      sym="${rest%%:*}"
+      type="${rest#*:}"
+      is_probe="1"
+    else
+      market="${cls%%:*}"
+      rest="${cls#*:}"
+      sym="${rest%%:*}"
+      type="${rest#*:}"
+    fi
+
+    input_market+=("$market")
+    input_sym+=("$sym")
+    input_type+=("$type")
+    input_is_probe+=("$is_probe")
+
+    # 确定腾讯 API code
+    local api_code=""
+    case "$market" in
+      sh|sz|hk|us) api_code="${market}${sym}" ;;
+      fund|error)  api_code="" ;;
+    esac
+    # probe 也走腾讯（市场为 sz）
+    [[ "$is_probe" == "1" ]] && api_code="sz${sym}"
+
+    input_api+=("$api_code")
+
+    if [[ -n "$api_code" ]]; then
+      tencent_api_list="${tencent_api_list:+${tencent_api_list},}${api_code}"
+      # 建立 api_code → index 的映射（eval 方式，bash 3.x 兼容）
+      _mset "api2idx" "$api_code" "$i"
+    fi
+
+    # 错误代码直接写结果
+    if [[ "$market" == "error" ]]; then
+      save_result "$i" "$(error_obj "$raw" "无法识别代码（A股6位/港股≤5位/美股ticker）")"
+    fi
+  done
+
+  # ── 2. 腾讯批量查询 ──────────────────────────────────────────────────────────
+  if [[ -n "$tencent_api_list" ]]; then
+    local tencent_resp
+    tencent_resp=$(tencent_fetch "$tencent_api_list")
+
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      local api_code; api_code=$(tencent_api_code_of "$line")
+      [[ -z "$api_code" ]] && continue
+
+      local idx; idx=$(_mget "api2idx" "$api_code")
+      [[ -z "$idx" ]] && continue
+
+      local user_code="${input_codes[$idx]}"
+      local type="${input_type[$idx]}"
+
+      if tencent_line_valid "$line"; then
+        local obj
+        if obj=$(parse_tencent "$line" "$user_code" "$type"); then
+          save_result "$idx" "$obj"
+          _mset "done" "$api_code" "1"
+        fi
+      fi
+    done <<< "$tencent_resp"
+  fi
+
+  # ── 3. 处理腾讯无数据的代码 ──────────────────────────────────────────────────
+  for (( i=0; i<n; i++ )); do
+    [[ -f "${_RESULTS_DIR}/${i}" ]] && continue   # 已有结果
+
+    local market="${input_market[$i]}"
+    local sym="${input_sym[$i]}"
+    local type="${input_type[$i]}"
+    local api="${input_api[$i]}"
+    local user_code="${input_codes[$i]}"
+    local is_probe="${input_is_probe[$i]}"
+
+    case "$market" in
+      error) continue ;;   # 已写结果
+
+      sh|sz)
+        # probe 代码腾讯无数据 → 场外基金
+        if [[ "$is_probe" == "1" ]]; then
+          save_result "$i" "$(query_fund "$sym")"
+          continue
+        fi
+        # A股回退：新浪财经
+        local sina_resp; sina_resp=$(sina_fetch "$api")
+        local line; line=$(printf '%s' "$sina_resp" | grep "str_${api}" | head -1)
+        local obj
+        if obj=$(parse_sina "$line" "$user_code" "$type" 2>/dev/null) && [[ -n "$obj" ]]; then
+          save_result "$i" "$obj"
+        else
+          save_result "$i" "$(error_obj "$user_code" "数据源暂时不可用，请稍后重试")"
+        fi
+        ;;
+
+      hk)
+        # 港股回退：东方财富 116.xxxxx
+        local em_resp; em_resp=$(em_stock_fetch "116.${sym}")
+        local obj
+        if obj=$(parse_em_stock "$em_resp" "$user_code" "港股" "HKD" 2>/dev/null) && [[ -n "$obj" ]]; then
+          save_result "$i" "$obj"
+        else
+          save_result "$i" "$(error_obj "$user_code" "港股数据不可用，请稍后重试")"
+        fi
+        ;;
+
+      us)
+        # 美股回退：东方财富 105.（NASDAQ）→ 106.（NYSE）
+        local em_resp obj
+        em_resp=$(em_stock_fetch "105.${sym}")
+        if obj=$(parse_em_stock "$em_resp" "$user_code" "美股" "USD" 2>/dev/null) && [[ -n "$obj" ]]; then
+          save_result "$i" "$obj"
+        else
+          em_resp=$(em_stock_fetch "106.${sym}")
+          if obj=$(parse_em_stock "$em_resp" "$user_code" "美股" "USD" 2>/dev/null) && [[ -n "$obj" ]]; then
+            save_result "$i" "$obj"
+          else
+            save_result "$i" "$(error_obj "$user_code" "美股数据不可用，请稍后重试")"
+          fi
+        fi
+        ;;
+
+      fund)
+        save_result "$i" "$(query_fund "$sym")"
+        ;;
+    esac
+  done
+
+  # ── 4. 按输入顺序输出 JSON 数组 ───────────────────────────────────────────────
+  printf '['
+  local first=true
+  for (( i=0; i<n; i++ )); do
+    [[ "$first" == "true" ]] && first=false || printf ','
+    if [[ -f "${_RESULTS_DIR}/${i}" ]]; then
+      cat "${_RESULTS_DIR}/${i}"
+    else
+      error_obj "${input_codes[$i]}" "未获取到数据"
+    fi
+  done
+  printf ']\n'
+}
+
+# ── sq fund ───────────────────────────────────────────────────────────────────
+# 直接走场外基金查询流程，跳过市场分类，输出 JSON 数组
+# 适用场景：已知是基金代码，或从 sq get 中分离出基金批量查询
+
+cmd_fund() {
+  [[ $# -eq 0 ]] && { printf 'usage: sq fund <code> [code...]\n' >&2; exit 1; }
+  printf '['
+  local first=true
+  for code in "$@"; do
+    [[ "$first" == "true" ]] && first=false || printf ','
+    query_fund "$code"
+  done
+  printf ']\n'
+}
+
+# ── sq pfile ──────────────────────────────────────────────────────────────────
+# 定位 portfolio.csv 文件路径，输出绝对路径或 NOT_FOUND
+# 查找优先级：$PORTFOLIO_FILE 环境变量 → openclaw 默认路径 → claude 默认路径
+
+cmd_pfile() {
+  local pfile="${PORTFOLIO_FILE:-}"
+
+  if [[ -z "$pfile" ]]; then
+    local _p
+    for _p in \
+      "$HOME/.openclaw/workspace/skills/stock-query/portfolio.csv" \
+      "$HOME/.claude/skills/stock-query/portfolio.csv"; do
+      [[ -f "$_p" ]] && pfile="$_p" && break
+    done
+  fi
+
+  # 无论来源，文件不存在均返回 NOT_FOUND
+  if [[ -z "$pfile" || ! -f "$pfile" ]]; then
+    printf 'NOT_FOUND\n'
+    return
+  fi
+
+  printf '%s\n' "$pfile"
+}
+
+# ── 入口 ──────────────────────────────────────────────────────────────────────
+
+subcmd="${1:-}"
+shift 2>/dev/null || true
+
+case "$subcmd" in
+  get)   cmd_get   "$@" ;;
+  fund)  cmd_fund  "$@" ;;
+  pfile) cmd_pfile "$@" ;;
+  *)
+    printf 'usage:\n  sq get   <code> [code...]   查询实时行情，输出 JSON\n' >&2
+    printf '  sq fund  <code> [code...]   查询场外基金净值，输出 JSON\n' >&2
+    printf '  sq pfile                    定位 portfolio.csv 路径\n' >&2
+    exit 1
+    ;;
+esac

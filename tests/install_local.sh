@@ -31,16 +31,29 @@ if [ ! -d "$SKILL_DIR" ]; then
 fi
 
 # ── 同步文件（与 clawhub publish 发布内容保持一致）────────────────────────────
-cp "$PROJECT_ROOT/SKILL.md"                "$SKILL_DIR/SKILL.md"
-cp "$PROJECT_ROOT/skill.yaml"              "$SKILL_DIR/skill.yaml"
-cp "$PROJECT_ROOT/scripts/portfolio.sh"    "$SKILL_DIR/portfolio.sh"
-chmod +x "$SKILL_DIR/portfolio.sh"
+cp "$PROJECT_ROOT/SKILL.md"  "$SKILL_DIR/SKILL.md"
+cp "$PROJECT_ROOT/skill.yaml" "$SKILL_DIR/skill.yaml"
+
+mkdir -p "$SKILL_DIR/scripts"
+cp "$PROJECT_ROOT/scripts/sq"           "$SKILL_DIR/scripts/sq"
+cp "$PROJECT_ROOT/scripts/portfolio.sh" "$SKILL_DIR/scripts/portfolio.sh"
+chmod +x "$SKILL_DIR/scripts/sq" "$SKILL_DIR/scripts/portfolio.sh"
 
 # examples/ 整目录同步（保留目标目录中用户自建文件，只覆盖 examples/）
 cp -r "$PROJECT_ROOT/examples" "$SKILL_DIR/"
 
-# ── 读取版本号并输出结果 ──────────────────────────────────────────────────────
+# ── 同步到 Claude Code skill 目录（始终执行）─────────────────────────────────
+_claude_skill_dir="${HOME}/.claude/skills/stock-query"
+mkdir -p "$_claude_skill_dir/scripts"
+cp "$PROJECT_ROOT/SKILL.md" "$_claude_skill_dir/SKILL.md"
+cp "$PROJECT_ROOT/scripts/sq"           "$_claude_skill_dir/scripts/sq"
+cp "$PROJECT_ROOT/scripts/portfolio.sh" "$_claude_skill_dir/scripts/portfolio.sh"
+chmod +x "$_claude_skill_dir/scripts/sq" "$_claude_skill_dir/scripts/portfolio.sh"
+cp -r "$PROJECT_ROOT/examples" "$_claude_skill_dir/"
+
+# ── 输出结果 ──────────────────────────────────────────────────────────────────
 version=$(grep '^version:' "$PROJECT_ROOT/skill.yaml" | awk '{print $2}')
 printf "[OK] stock-query v%s -> %s\n" "$version" "$SKILL_DIR"
+printf "[OK] claude skill   -> %s\n" "$_claude_skill_dir"
 echo ""
 echo "下一步：在 OpenClaw 中开启新 session 后执行测试（skill 在 session 启动时加载）"

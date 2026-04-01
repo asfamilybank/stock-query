@@ -2,59 +2,55 @@
 
 ## 仓库结构
 
-这是一个发布到 ClawHub 的 openclaw skill，支持查询全球主要市场股票行情（A 股、港股、美股）、ETF、场外基金及主要指数，同时提供 Claude Code 原生格式，当前为双格式：
+这是一个发布到 ClawHub 的 openclaw skill，支持查询全球主要市场股票行情（A 股、港股、美股）、ETF、场外基金及主要指数，同时兼容 Claude Code 原生格式，使用单一 SKILL.md：
 
 | 路径 | 格式 | 触发方式 |
 |------|------|---------|
 | `SKILL.md` + `skill.yaml` | OpenClaw | 自然语言关键词，`npx clawhub install` 安装 |
-| `claude/SKILL.md` | Claude Code 原生 | `/stock-query` slash command |
+| `SKILL.md`（同一文件） | Claude Code 原生 | `/stock-query` slash command |
 
-## claude/SKILL.md description 写法规范
+`SKILL.md` frontmatter 同时含有 OpenClaw 字段（`name`、`version`、`description`）和 Claude Code 字段（`user-invocable`、`allowed-tools`）。OpenClaw 规范未限制额外字段，ClawHub 只提取它关心的字段。
+
+## description 写法规范
 
 `description` 字段决定 Claude 是否主动识别用户意图调用 skill（不等待斜杠命令）：
 - 必须包含 `TRIGGER when: <触发条件>` — 否则 Claude 会绕过 skill 自己实现
 - 必须包含 `NOT for: <排除场景>` — 防止误触发
-- 格式参考根目录 `SKILL.md` 的 `TRIGGER when` / `NOT for` 字段，两者语义对齐
-
-> ⚠️ `claude/`（无点号）不是 Claude Code 标准 skill 路径。标准路径为 `.claude/skills/stock-query/SKILL.md`。当前状态待验证是否真正注册为 slash command。
 
 ## 修改规范
 
-**修改 skill 逻辑时，两个 SKILL.md 必须同步更新：**
-- `SKILL.md`（根目录）— OpenClaw 格式
-- `claude/SKILL.md` — Claude Code 原生格式
-
-两者的 skill 内容应保持一致，不允许功能分叉。
+**只有一个 SKILL.md，直接修改即可。** 修改后运行 `bash tests/install_local.sh` 同步到 skill 目录。
 
 ## 版本与发布
 
-- 版本号需在三处同步维护：`skill.yaml`、`SKILL.md`（frontmatter）、`claude/SKILL.md`（frontmatter）（`clawhub.json` 仅作本地参考，不参与发布）
-- 注意：两个 SKILL.md 的 Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），bump 时需用 `replace_all` 一并替换
+- 版本号需在两处同步维护：`skill.yaml`、`SKILL.md`（frontmatter）（`clawhub.json` 仅作本地参考，不参与发布）
+- 注意：`SKILL.md` Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），bump 时需用 `replace_all` 一并替换
 - **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有变化时执行；description/触发条件改动发 patch，功能改动发 minor/major；`claude/` 目录的改动不需要触发 ClawHub 发布
 - **ClawHub 安全扫描**：扫描器检查以下类别：Purpose & Capability（功能与描述一致性）、Instruction Scope（操作边界明确性）、Credentials（环境变量声明完整性）、Persistence & Privilege（权限组合说明）。修改 skill.yaml/SKILL.md 后如触发扫描警告，参见下方"安全扫描修复规范"。
 
 ### ClawHub 发布流程
 
 ```bash
-mkdir -p /tmp/stock-query
+mkdir -p /tmp/stock-query/scripts
 cp SKILL.md skill.yaml /tmp/stock-query/
 cp -r examples /tmp/stock-query/
-cp scripts/portfolio.sh /tmp/stock-query/
+cp scripts/sq scripts/portfolio.sh /tmp/stock-query/scripts/
 npx clawhub publish /tmp/stock-query --version X.X.X --slug stock-query
 rm -rf /tmp/stock-query
 ```
 
+- 发布目录结构需与项目一致：`scripts/sq`、`scripts/portfolio.sh` 均在 `scripts/` 子目录下
 - `examples/` 需要一并发布，install 时会将其安装到 skill 目录
-- `scripts/portfolio.sh` **必须随 skill 发布**（历史兼容）；v2.2.0 起 Command 3 内置 grep/awk 直接操作 portfolio.csv，不再依赖此脚本
+- `scripts/portfolio.sh` **必须随 skill 发布**（历史兼容）；v2.2.0 起 Command 1 内置 grep/awk 直接操作 portfolio.csv，不再依赖此脚本
 - `scripts/` 中其他脚本（query_price.sh、monitor.sh）是独立工具，skill 运行不依赖，无需发布
 
 ## 关键目录与文件
 
 | 路径 | 用途 |
 |------|------|
-| `scripts/portfolio.sh` | **随 skill 发布**（历史兼容）；v2.2.0 起 Command 3 改为内联 bash，不再依赖此脚本 |
+| `scripts/portfolio.sh` | **随 skill 发布**（历史兼容）；v2.2.0 起 Command 1 改为内联 bash，不再依赖此脚本 |
 | `scripts/` | 其他独立工具脚本（query_price.sh 批量查询、monitor.sh 接口监控） |
-| `claude/` | Claude Code 原生格式 skill |
+| `scripts/sq` | 行情查询 CLI，`sq get`/`sq fund`/`sq pfile` 三个子命令 |
 | `examples/portfolio.csv` | 自选股/持仓文件示例模板，随 skill 一起安装到 skill 目录 |
 
 ### portfolio_file 使用规范
@@ -87,3 +83,21 @@ rm -rf /tmp/stock-query
 ## 注意事项
 
 - **git commit**：不可用 heredoc（`-m "$(cat <<'EOF'...)"`），会触发 1Password 填充失败；改用 `-m "多行字符串"` 形式
+- **openclaw `--session-id`**：每次创建独立对话线程（无历史共享），但不产生 session store 条目（`openclaw sessions` 看不到）；agent memory 文件在所有 session 间共享
+- **openclaw jq 提取**：多轮响应用 `jq -r '[.result.payloads[].text] | join("\n")'`，不要用 `payloads[0]`（会截断后续 payload）
+
+## 测试注意事项
+
+- **测试套件**：`tests/` 目录下有完整 L0-L6 测试套件，流程见 `tests/README.md`，用例见 `tests/cases.md`，结果记录到 `tests/results/YYYY-MM-DD.md`（gitignored）
+- **Shell 自动层**：L0（`datasource_check.sh`）、L1+L2（`check.sh`）为 shell 自动断言，无需 agent；L3-L6 为 agent 半自动
+- **快速回归**：`bash tests/datasource_check.sh && bash tests/check.sh`（~80s，exit 0 即全通过）
+- **测试前执行**：`bash tests/install_local.sh`（同步当前开发内容到 openclaw 路径），修改后需重开 openclaw session 才能加载新 skill
+- **install_local.sh 覆盖范围**：同步到 `~/.openclaw/workspace/skills/stock-query/`；若 `~/.claude/skills/stock-query/` 存在也一并同步（含 `scripts/sq`）
+- **L6 前置**：备份并替换 portfolio.csv（路径：`~/.openclaw/workspace/skills/stock-query/portfolio.csv`）
+- **PORTFOLIO_FILE 环境变量**不透传到 openclaw agent 执行环境，测试只能用默认路径
+
+## Skill 指令调优方法论
+
+- **文字禁令效果有限**：`禁止做X` 类指令对持续性行为问题效果不稳定
+- **有效方案**：改为伪代码分步逻辑（`Step A: ... Step B: ... Step D: 不得跳过`），明确执行顺序比措辞强调更有效——TC-5.4 持仓=0 条目缺失问题经 4 次迭代，伪代码方案最终生效
+- **版本分级**：指令调优 → patch；功能新增/流程变更 → minor/major
