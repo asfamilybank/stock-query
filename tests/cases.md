@@ -489,7 +489,7 @@ openclaw agent -m "查我的持仓" --session-id "sq-tc-6.4-$(date +%s)" --json 
 > ```bash
 > cp ~/.openclaw/workspace/skills/stock-query/portfolio.csv \
 >    ~/.openclaw/workspace/skills/stock-query/portfolio.csv.bak 2>/dev/null || true
-> cp ~/.openclaw/workspace/skills/stock-query/examples/portfolio.csv \
+> cp ~/.openclaw/workspace/skills/stock-query/assets/portfolio.csv \
 >    ~/.openclaw/workspace/skills/stock-query/portfolio.csv
 > ```
 > 测试完成后恢复：
@@ -521,7 +521,7 @@ openclaw agent -m "显示我的自选股" --session-id "sq-tc-7.1-$(date +%s)" -
 
 ### TC-7.2 新增标的
 
-> 使用 `科大讯飞`（002230）——不在 examples/portfolio.csv 中，确保测试"新增"而非"重复"分支。
+> 使用 `科大讯飞`（002230）——不在 assets/portfolio.csv 中，确保测试"新增"而非"重复"分支。
 
 ```bash
 openclaw agent -m "把科大讯飞加到自选股，持有500股，成本30.00" --session-id "sq-tc-7.2-$(date +%s)" --json 2>/dev/null \
@@ -639,7 +639,7 @@ openclaw agent -m "查我的自选股" --session-id "sq-tc-7.7-$(date +%s)" --js
 ```
 
 **PASS：**
-- `sq pfile` 返回 NOT_FOUND，输出引导信息含创建命令（cp examples/...），不报错崩溃
+- `sq pfile` 返回 NOT_FOUND，输出引导信息含创建命令（cp assets/...），不报错崩溃
 
 **PARTIAL：**
 - 有文件不存在提示，但引导信息不完整（未提供具体命令）

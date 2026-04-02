@@ -8,8 +8,12 @@ set -e
 REPO="asfamilybank/stock-query"
 BRANCH="main"
 SKILL_NAME="stock-query"
-SKILL_FILE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/claude/SKILL.md"
-EXAMPLES_PORTFOLIO_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}/examples/portfolio.csv"
+BASE_URL="https://raw.githubusercontent.com/${REPO}/${BRANCH}"
+SKILL_FILE_URL="${BASE_URL}/SKILL.md"
+EXAMPLES_PORTFOLIO_URL="${BASE_URL}/assets/portfolio.csv"
+SQ_URL="${BASE_URL}/scripts/sq.sh"
+PORTFOLIO_SH_URL="${BASE_URL}/scripts/portfolio.sh"
+QUERY_PRICE_URL="${BASE_URL}/scripts/query_price.sh"
 
 # Parse args
 PROJECT_INSTALL=false
@@ -46,7 +50,10 @@ extract_version() {
 
 TMP_SKILL="$(mktemp)"
 TMP_PORTFOLIO="$(mktemp)"
-trap 'rm -f "${TMP_SKILL}" "${TMP_PORTFOLIO}"' EXIT
+TMP_SQ="$(mktemp)"
+TMP_PORTFOLIO_SH="$(mktemp)"
+TMP_QUERY_PRICE="$(mktemp)"
+trap 'rm -f "${TMP_SKILL}" "${TMP_PORTFOLIO}" "${TMP_SQ}" "${TMP_PORTFOLIO_SH}" "${TMP_QUERY_PRICE}"' EXIT
 
 echo "正在获取最新版本信息..."
 curl -fsSL "${SKILL_FILE_URL}" -o "${TMP_SKILL}"
@@ -79,7 +86,19 @@ else
   echo "  /stock-query AAPL 00700 601991"
 fi
 
-# 安装/更新 examples/ 目录
+# 安装/更新 assets/ 目录
 curl -fsSL "${EXAMPLES_PORTFOLIO_URL}" -o "${TMP_PORTFOLIO}"
-mkdir -p "${INSTALL_DIR}/examples"
-cp "${TMP_PORTFOLIO}" "${INSTALL_DIR}/examples/portfolio.csv"
+mkdir -p "${INSTALL_DIR}/assets"
+cp "${TMP_PORTFOLIO}" "${INSTALL_DIR}/assets/portfolio.csv"
+
+# 安装/更新 scripts/
+curl -fsSL "${SQ_URL}" -o "${TMP_SQ}"
+curl -fsSL "${PORTFOLIO_SH_URL}" -o "${TMP_PORTFOLIO_SH}"
+curl -fsSL "${QUERY_PRICE_URL}" -o "${TMP_QUERY_PRICE}"
+mkdir -p "${INSTALL_DIR}/scripts"
+cp "${TMP_SQ}" "${INSTALL_DIR}/scripts/sq.sh"
+cp "${TMP_PORTFOLIO_SH}" "${INSTALL_DIR}/scripts/portfolio.sh"
+cp "${TMP_QUERY_PRICE}" "${INSTALL_DIR}/scripts/query_price.sh"
+chmod +x "${INSTALL_DIR}/scripts/sq.sh" \
+         "${INSTALL_DIR}/scripts/portfolio.sh" \
+         "${INSTALL_DIR}/scripts/query_price.sh"

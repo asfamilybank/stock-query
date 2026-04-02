@@ -35,21 +35,23 @@ cp "$PROJECT_ROOT/SKILL.md"  "$SKILL_DIR/SKILL.md"
 cp "$PROJECT_ROOT/skill.yaml" "$SKILL_DIR/skill.yaml"
 
 mkdir -p "$SKILL_DIR/scripts"
-cp "$PROJECT_ROOT/scripts/sq"           "$SKILL_DIR/scripts/sq"
-cp "$PROJECT_ROOT/scripts/portfolio.sh" "$SKILL_DIR/scripts/portfolio.sh"
-chmod +x "$SKILL_DIR/scripts/sq" "$SKILL_DIR/scripts/portfolio.sh"
+cp "$PROJECT_ROOT/scripts/sq.sh"           "$SKILL_DIR/scripts/sq.sh"
+cp "$PROJECT_ROOT/scripts/portfolio.sh"    "$SKILL_DIR/scripts/portfolio.sh"
+cp "$PROJECT_ROOT/scripts/query_price.sh"  "$SKILL_DIR/scripts/query_price.sh"
+chmod +x "$SKILL_DIR/scripts/sq.sh" "$SKILL_DIR/scripts/portfolio.sh" "$SKILL_DIR/scripts/query_price.sh"
 
-# examples/ 整目录同步（保留目标目录中用户自建文件，只覆盖 examples/）
-cp -r "$PROJECT_ROOT/examples" "$SKILL_DIR/"
+# assets/ 整目录同步（保留目标目录中用户自建文件，只覆盖 assets/）
+cp -r "$PROJECT_ROOT/assets" "$SKILL_DIR/"
 
 # ── 同步到 Claude Code skill 目录（始终执行）─────────────────────────────────
 _claude_skill_dir="${HOME}/.claude/skills/stock-query"
 mkdir -p "$_claude_skill_dir/scripts"
 cp "$PROJECT_ROOT/SKILL.md" "$_claude_skill_dir/SKILL.md"
-cp "$PROJECT_ROOT/scripts/sq"           "$_claude_skill_dir/scripts/sq"
-cp "$PROJECT_ROOT/scripts/portfolio.sh" "$_claude_skill_dir/scripts/portfolio.sh"
-chmod +x "$_claude_skill_dir/scripts/sq" "$_claude_skill_dir/scripts/portfolio.sh"
-cp -r "$PROJECT_ROOT/examples" "$_claude_skill_dir/"
+cp "$PROJECT_ROOT/scripts/sq.sh"           "$_claude_skill_dir/scripts/sq.sh"
+cp "$PROJECT_ROOT/scripts/portfolio.sh"    "$_claude_skill_dir/scripts/portfolio.sh"
+cp "$PROJECT_ROOT/scripts/query_price.sh"  "$_claude_skill_dir/scripts/query_price.sh"
+chmod +x "$_claude_skill_dir/scripts/sq.sh" "$_claude_skill_dir/scripts/portfolio.sh" "$_claude_skill_dir/scripts/query_price.sh"
+cp -r "$PROJECT_ROOT/assets" "$_claude_skill_dir/"
 
 # ── 输出结果 ──────────────────────────────────────────────────────────────────
 version=$(grep '^version:' "$PROJECT_ROOT/skill.yaml" | awk '{print $2}')

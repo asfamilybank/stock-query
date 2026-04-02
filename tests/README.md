@@ -129,7 +129,7 @@ L6 会写入文件，执行前隔离测试文件：
 ```bash
 cp ~/.openclaw/workspace/skills/stock-query/portfolio.csv \
    ~/.openclaw/workspace/skills/stock-query/portfolio.csv.bak 2>/dev/null || true
-cp ~/.openclaw/workspace/skills/stock-query/examples/portfolio.csv \
+cp ~/.openclaw/workspace/skills/stock-query/assets/portfolio.csv \
    ~/.openclaw/workspace/skills/stock-query/portfolio.csv
 ```
 

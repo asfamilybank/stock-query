@@ -19,7 +19,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SQ="$SCRIPT_DIR/../scripts/sq"
+SQ="$SCRIPT_DIR/../scripts/sq.sh"
 
 PASS=0; FAIL=0; SKIP=0
 

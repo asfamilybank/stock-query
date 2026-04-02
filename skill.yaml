@@ -31,7 +31,7 @@ config:
     type: string
     required: false
     default: ""
-    description: "可选：自选股/持仓文件路径（CSV 格式，格式参见同目录 examples/portfolio.csv）。设置后将作为 PORTFOLIO_FILE 环境变量传递给 portfolio.sh。留空时 portfolio.sh 在默认安装目录（~/.openclaw/workspace/skills/stock-query/ 或 ~/.claude/skills/stock-query/）下查找 portfolio.csv；文件不存在时 skill 会引导用户从 examples/portfolio.csv 复制创建。文件操作仅在用户显式指令下执行。⚠️ 安全提示：本 skill 具有 shell + network 权限，请勿将此项指向含账户凭证、API 密钥或其他敏感信息的文件。"
+    description: "可选：自选股/持仓文件路径（CSV 格式，格式参见同目录 assets/portfolio.csv）。设置后将作为 PORTFOLIO_FILE 环境变量传递给 portfolio.sh。留空时 portfolio.sh 在默认安装目录（~/.openclaw/workspace/skills/stock-query/ 或 ~/.claude/skills/stock-query/）下查找 portfolio.csv；文件不存在时 skill 会引导用户从 assets/portfolio.csv 复制创建。文件操作仅在用户显式指令下执行。⚠️ 安全提示：本 skill 具有 shell + network 权限，请勿将此项指向含账户凭证、API 密钥或其他敏感信息的文件。"
 
 entryPoint:
   type: natural

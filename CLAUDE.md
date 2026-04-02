@@ -34,14 +34,14 @@
 ```bash
 mkdir -p /tmp/stock-query/scripts
 cp SKILL.md /tmp/stock-query/
-cp -r examples /tmp/stock-query/
+cp -r assets /tmp/stock-query/
 cp scripts/sq.sh scripts/portfolio.sh scripts/query_price.sh /tmp/stock-query/scripts/
 npx clawhub publish /tmp/stock-query --version X.X.X --slug stock-query
 rm -rf /tmp/stock-query
 ```
 
 - 发布目录结构需与项目一致：`scripts/sq.sh`、`scripts/portfolio.sh`、`scripts/query_price.sh` 均在 `scripts/` 子目录下
-- `examples/` 需要一并发布，install 时会将其安装到 skill 目录
+- `assets/` 需要一并发布，install 时会将其安装到 skill 目录
 - `scripts/portfolio.sh` **必须随 skill 发布**（历史兼容）；v2.2.0 起 Command 1 内置 grep/awk 直接操作 portfolio.csv，不再依赖此脚本
 - `scripts/query_price.sh` 随 skill 发布，供用户独立使用；`scripts/monitor.sh` 是内部工具，无需发布
 
@@ -53,16 +53,16 @@ rm -rf /tmp/stock-query
 | `scripts/portfolio.sh` | **随 skill 发布**（历史兼容）；v2.2.0 起 Command 1 改为内联 bash，不再依赖此脚本 |
 | `scripts/query_price.sh` | 批量查询独立脚本，**随 skill 发布**，供用户直接使用 |
 | `scripts/monitor.sh` | 接口监控内部工具，不参与发布 |
-| `examples/portfolio.csv` | 自选股/持仓文件示例模板，随 skill 一起安装到 skill 目录 |
+| `assets/portfolio.csv` | 自选股/持仓文件示例模板，随 skill 一起安装到 skill 目录 |
 
 ### portfolio_file 使用规范
 
-- 用户实际文件路径：`{skill_install_dir}/portfolio.csv`（不存在时 skill 引导用户从 `examples/portfolio.csv` 复制创建，install.sh 不自动创建）
-- **install.sh 行为应与 clawhub 安装保持一致**：只装 `SKILL.md` + `examples/`，不做用户文件初始化
+- 用户实际文件路径：`{skill_install_dir}/portfolio.csv`（不存在时 skill 引导用户从 `assets/portfolio.csv` 复制创建，install.sh 不自动创建）
+- **install.sh 行为应与 clawhub 安装保持一致**：只装 `SKILL.md` + `assets/`，不做用户文件初始化
 - 格式：CSV，表头 `代码,名称,持仓,成本价`，`#` 开头为注释行
 - 名称/持仓/成本价均可留空；持仓为 0 表示纯自选（只查行情）
 - 修改 Step 6 逻辑时，6a（文件加载）和 6b（手动输入）均需同步维护
-- `examples/portfolio.csv` 随 skill 一起发布，install.sh 和 clawhub 安装后均可在 skill 目录下找到
+- `assets/portfolio.csv` 随 skill 一起发布，install.sh 和 clawhub 安装后均可在 skill 目录下找到
 
 ## 安全扫描修复规范（ClawHub OpenClaw Scanner）
 

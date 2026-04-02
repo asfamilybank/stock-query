@@ -307,7 +307,7 @@ echo "$PFILE"
 未找到自选股文件。请执行以下步骤创建：
 
 1. 复制模板文件（路径替换为你的实际安装目录）：
-   cp ~/.openclaw/workspace/skills/stock-query/examples/portfolio.csv \
+   cp ~/.openclaw/workspace/skills/stock-query/assets/portfolio.csv \
       ~/.openclaw/workspace/skills/stock-query/portfolio.csv
 
 2. 编辑文件，填入你的自选股和持仓信息。
@@ -315,7 +315,7 @@ echo "$PFILE"
 3. 或直接设置 PORTFOLIO_FILE 指向已有文件路径。
 ```
 
-**CSV 文件格式**（参考 `examples/portfolio.csv`）：
+**CSV 文件格式**（参考 `assets/portfolio.csv`）：
 
 ```
 代码,名称,持仓,成本价
