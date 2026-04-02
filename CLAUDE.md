@@ -70,6 +70,7 @@ rm -rf /tmp/stock-query
 - **Purpose & Capability**：`description` 必须涵盖 skill 的全部能力（含文件管理等非只读操作），不能只描述主功能
 - **Instruction Scope**：SKILL.md 需有"权限与操作范围"章节，明确：① 每个权限的具体用途和限制，② 文件操作仅在用户显式指令下触发，③ 网络访问仅限声明的域名白名单
 - **Persistence & Privilege**：`permissions:` 条目加内联注释（`# 用途: ...`）说明各权限的限制范围
+- **Instruction Scope 误判**：扫描器看到脚本 `printf/echo` 就认为违反"静默执行原则"；解法：在 SKILL.md 该章节标题加"（Claude 对话输出约束）"并加注"脚本 stdout 为结构化 JSON，不影响此约束"
 
 ## 数据源
 
