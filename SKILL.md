@@ -1,11 +1,11 @@
 ---
 name: stock-query
-version: 2.3.6
+version: 2.3.7
 description: >
   查询全球主要市场股票实时行情（A 股、港股、美股、ETF、场外基金、主要指数），支持批量查询与持仓市值计算。
   同时支持在用户显式指令下管理本地 portfolio.csv 自选股/持仓文件（增/删/改/查）；文件仅含股票代码、名称、持仓、成本价，禁止存放账户凭证或密钥。
   需要 shell 权限执行：curl（行情 API 请求）、iconv（GBK→UTF-8 转码）、grep/awk/mktemp（文件操作，仅限 portfolio.csv）。
-  文件访问：仅限 portfolio.csv 一个文件（固定在默认安装目录下查找，无需配置任何环境变量）；路径含 token/secret/.ssh 等凭证关键词时自动拒绝操作。
+  文件访问：仅限 portfolio.csv 一个文件，固定在默认安装目录（~/.openclaw/workspace/skills/stock-query/ 或 ~/.claude/skills/stock-query/）下查找，无需配置任何环境变量。
   网络访问：仅限 qt.gtimg.cn、hq.sinajs.cn、push2.eastmoney.com、fundgz.1234567.com.cn、api.fund.eastmoney.com 五个行情数据源。
   TRIGGER when: 用户要求查看股价、行情、净值、持仓盈亏、大盘指数，或管理自选股/持仓文件时，直接调用，无需等待斜杠命令。
   NOT for: 加密货币、期货、期权、外汇。
@@ -57,12 +57,12 @@ allowed-tools:
 
 version 输出：
 ```
-stock-query v2.3.6
+stock-query v2.3.7
 ```
 
 help 输出：
 ```
-stock-query v2.3.6 — 全球股票/ETF/基金/指数实时行情查询
+stock-query v2.3.7 — 全球股票/ETF/基金/指数实时行情查询
 
 用法：
   /stock-query <代码> [代码2 ...]   查询一个或多个标的
@@ -96,7 +96,7 @@ stock-query v2.3.6 — 全球股票/ETF/基金/指数实时行情查询
 
 **⛔ 严禁向用户输出任何中间推理或过程信息。** 这是最高优先级约束，覆盖所有步骤。
 
-> 本约束仅适用于 Claude 的对话文本输出。`scripts/sq.sh` 仅向 stdout 输出结构化 JSON 数据（由 Claude 内部消费），向 stderr 输出错误/用法提示，不向用户界面打印任何过程信息。
+> 本约束仅适用于 Claude 的对话文本输出。`scripts/sq.sh` stdout 仅输出结构化数据供 Claude 内部消费：行情/基金命令输出 JSON 数组，`pfile` 命令输出文件绝对路径或控制令牌 `NOT_FOUND`；stderr 输出错误/用法提示。脚本不向用户界面打印任何过程信息。
 
 以下内容**绝对禁止出现**在回复中：
 - 市场/类型判断（如"014978 是场外基金"）
@@ -231,7 +231,6 @@ PFILE=$(bash scripts/sq.sh pfile)
 ```
 
 - 输出 `NOT_FOUND` → 立即输出创建引导（见 Command 1），停止执行
-- 输出 `PATH_REJECTED` → 提示"路径包含疑似凭证关键词，已拒绝操作"，停止执行
 - 否则读取文件，提取所有代码后用 `sq get` 批量查询
 
 执行步骤（严格按序）：
@@ -303,7 +302,6 @@ echo "$PFILE"
 ```
 
 - 输出 `NOT_FOUND` → 立即向用户输出下方创建引导，停止执行，**不得创建任何替代文件**
-- 输出 `PATH_REJECTED` → 向用户提示"路径包含疑似凭证关键词（如 token、secret、.ssh 等），已拒绝操作"，停止执行
 - 否则将 `$PFILE` 用于所有后续操作
 
 **portfolio.csv 不存在时**，引导用户创建：

@@ -596,12 +596,6 @@ cmd_pfile() {
     return
   fi
 
-  # 安全校验：拒绝指向疑似凭证/密钥的路径
-  if printf '%s' "$pfile" | grep -qiE '(\.ssh|\.gnupg|credentials?|token|secret|api.?key|password|\.env$|\.netrc|\.aws)'; then
-    printf 'PATH_REJECTED\n'
-    return
-  fi
-
   printf '%s\n' "$pfile"
 }
 
