@@ -64,7 +64,6 @@ rm -rf /tmp/stock-query
 - **install.sh 行为应与 clawhub 安装保持一致**：只装 `SKILL.md` + `assets/`，不做用户文件初始化
 - 格式：CSV，表头 `代码,名称,数量,自选价格`，`#` 开头为注释行
 - 名称/数量/自选价格均可留空；数量为 0 表示纯自选（只查行情）
-- 修改 Step 4 逻辑时，4a（文件加载）和 4b（手动输入）均需同步维护
 - `assets/portfolio.csv` 随 skill 一起发布，install.sh 和 clawhub 安装后均可在 skill 目录下找到
 
 ## 安全扫描修复规范（ClawHub OpenClaw Scanner）
