@@ -25,9 +25,9 @@
 
 ## 版本与发布
 
-- **发布顺序**：`bash bump.sh patch|minor|major alpha` 开 alpha → `bash tests/install_local.sh` 同步 → `bash tests/datasource_check.sh && bash tests/check.sh` 全过 → **完整更新 CHANGELOG.md** → `bash bump.sh release` → **逐项核查 ClawHub 安全扫描项** → 发 ClawHub；bump alpha 必须在 install_local.sh 之前（否则同步的是旧版本号）；禁止在测试前 bump release，禁止在 CHANGELOG 未完整时 commit
+- **测试顺序**：`bash bump.sh patch|minor|major alpha` → `bash tests/install_local.sh` 同步 → `bash tests/datasource_check.sh && bash tests/check.sh`；bump alpha 必须在 install_local.sh 之前（否则同步的是旧版本号）
+- **发布顺序**（以测试全过为前提）：**逐项核查 ClawHub 安全扫描项** → **完整更新 CHANGELOG.md** → `bash bump.sh release` → git commit + push → 发 ClawHub；禁止在 CHANGELOG 未完整时 commit
 - **版本管理**：使用 `bump.sh` 统一管理（自动同步四处）；预发布格式 `X.Y.Z-alpha.N`（`bash bump.sh minor alpha` 开启，`bash bump.sh alpha` 递增，`bash bump.sh release` 发正式版）
-- 版本号需在三处同步维护：`skill.yaml`、`SKILL.md`（frontmatter）、`clawhub.json`（发布时 ClawHub 从中获取 tagline、description、category、tags 等元数据）；`bump.sh` 已自动处理四处（含 SKILL.md 正文）
 - 注意：`SKILL.md` Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），`bump.sh` 已自动处理；手动 bump 时需用 `replace_all` 一并替换
 - **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有变化时执行；description/触发条件改动发 patch，功能改动发 minor/major；`claude/` 目录的改动不需要触发 ClawHub 发布
 - **ClawHub 安全扫描**：扫描器检查以下类别：Purpose & Capability（功能与描述一致性）、Instruction Scope（操作边界明确性）、Credentials（环境变量声明完整性）、Persistence & Privilege（权限组合说明）。修改 skill.yaml/SKILL.md 后如触发扫描警告，参见下方"安全扫描修复规范"。
@@ -64,7 +64,7 @@ rm -rf /tmp/stock-query
 - **install.sh 行为应与 clawhub 安装保持一致**：只装 `SKILL.md` + `assets/`，不做用户文件初始化
 - 格式：CSV，表头 `代码,名称,数量,自选价格`，`#` 开头为注释行
 - 名称/数量/自选价格均可留空；数量为 0 表示纯自选（只查行情）
-- 修改 Step 6 逻辑时，6a（文件加载）和 6b（手动输入）均需同步维护
+- 修改 Step 4 逻辑时，4a（文件加载）和 4b（手动输入）均需同步维护
 - `assets/portfolio.csv` 随 skill 一起发布，install.sh 和 clawhub 安装后均可在 skill 目录下找到
 
 ## 安全扫描修复规范（ClawHub OpenClaw Scanner）
@@ -96,10 +96,9 @@ rm -rf /tmp/stock-query
 
 ## 测试注意事项
 
-- **测试套件**：`tests/` 目录下有完整 L0-L6 测试套件，流程见 `tests/README.md`，用例见 `tests/cases.md`，结果记录到 `tests/results/YYYY-MM-DD.md`（gitignored）
-- **Shell 自动层**：L0（`datasource_check.sh`）、L1-L6（`check.sh`，38 项）全部为 shell 自动断言，无需 agent
+- **测试套件**：`tests/` 目录下有完整 L0-L7 测试套件，流程见 `tests/README.md`，用例见 `tests/cases.md`，结果记录到 `tests/results/YYYY-MM-DD.md`（gitignored）
+- **Shell 自动层**：L0（`datasource_check.sh`）、L1-L7（`check.sh`，50 项）全部为 shell 自动断言，无需 agent
 - **快速回归**：`bash tests/datasource_check.sh && bash tests/check.sh`（~80s，exit 0 即全通过）
-- **测试前执行**：`bash tests/install_local.sh`（同步当前开发内容到 openclaw 路径），修改后需重开 openclaw session 才能加载新 skill
 - **测试结果记录**：每次跑完 `check.sh` 后必须将结果写入 `tests/results/YYYY-MM-DD.md`，包括 PASS/FAIL 汇总与本次修复说明
 - **install_local.sh 覆盖范围**：同步到 `~/.openclaw/workspace/skills/stock-query/`；若 `~/.claude/skills/stock-query/` 存在也一并同步（含 `scripts/sq.sh`）
 - **L6 前置**：备份并替换 portfolio.csv（路径：`~/.openclaw/workspace/skills/stock-query/portfolio.csv`）
