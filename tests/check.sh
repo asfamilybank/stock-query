@@ -341,7 +341,7 @@ section_L6() {
   # shellcheck disable=SC2064
   trap "rm -f '$pf'" RETURN
 
-  printf '代码,名称,持仓,成本价\n601991,大唐发电,1000,4.00\n000300,,0,\n' > "$pf"
+  printf '代码,名称,数量,自选价格\n601991,大唐发电,1000,4.00\n000300,,0,\n' > "$pf"
 
   # L6.1 查：grep -v 注释 + 跳过表头
   local rows; rows=$(grep -v '^#' "$pf" | tail -n +2)
@@ -373,7 +373,7 @@ section_L6() {
   awk -F',' -v c="002230" -v n="$new_line" \
     'BEGIN{OFS=","} $1==c{print n;next}{print}' "$pf" > "$tmp" && mv "$tmp" "$pf"
   if grep -q "^002230,科大讯飞,2000,35.00$" "$pf"; then
-    pass "L6.4  改：002230 持仓更新为 2000/35.00"
+    pass "L6.4  改：002230 数量更新为 2000/35.00"
   else
     fail "L6.4  改：002230 更新后内容不匹配"
     printf '  实际: %s\n' "$(grep "^002230" "$pf")"

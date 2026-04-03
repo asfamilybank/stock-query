@@ -13,7 +13,7 @@
 | L2 市场识别 | 代码分类、字段完整性 JSON 断言 | Shell 自动 | <60s |
 | L3 行情格式 | Step 5 Markdown 表格、emoji 规则、时段提示 | Agent 半自动 | ~5min |
 | L4 场外基金 | Step 4 估值/净值切换、QDII | Agent 半自动 | ~3min |
-| L5 持仓计算 | Step 6 市值、浮盈亏、portfolio 文件读取 | Agent 半自动 | ~5min |
+| L5 自选市值计算 | Step 6 市值、浮盈亏、portfolio 文件读取 | Agent 半自动 | ~5min |
 | L6 Command 1 | portfolio 增删改查 | Agent 半自动 | ~8min |
 
 **快速回归**（发版前必跑）：

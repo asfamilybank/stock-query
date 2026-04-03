@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# portfolio.sh — 自选股/持仓文件增删改查
+# portfolio.sh — 自选股文件增删改查
 #
 # Usage:
 #   portfolio.sh list

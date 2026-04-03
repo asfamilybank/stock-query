@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.4.1] - 2026-04-03
+
+### Changed
+- 全面替换"持仓"术语为"自选"体系，降低隐私泄漏风险：
+  - portfolio.csv 列名 `持仓` → `数量`，`成本价` → `自选价格`
+  - "持仓市值" → "自选市值"，"持仓合计" → "自选合计"，"持仓=0" → "数量=0"
+  - SKILL.md、skill.yaml description、README.md、clawhub.json 同步更新
+  - 测试文件（check.sh、cases.md）及 assets/portfolio.csv 注释/表头同步更新
+
 ## [2.4.0] - 2026-04-03
 
 ### Added

@@ -56,14 +56,14 @@ rm -rf /tmp/stock-query
 | `scripts/sq.sh` | 行情查询 CLI，**随 skill 发布**，`sq get`/`sq fund`/`sq hist`/`sq pfile` 四个子命令 |
 | `scripts/fmt.sh` | 格式化输出工具，**随 skill 发布**，`sq.sh --format` 依赖此脚本；缺失时回退输出原始 JSON |
 | `scripts/portfolio.sh` | **随 skill 发布**（历史兼容）；v2.2.0 起 Command 1 改为内联 bash，不再依赖此脚本 |
-| `assets/portfolio.csv` | 自选股/持仓文件示例模板，随 skill 一起安装到 skill 目录 |
+| `assets/portfolio.csv` | 自选股文件示例模板，随 skill 一起安装到 skill 目录 |
 
 ### portfolio_file 使用规范
 
 - 用户实际文件路径：`{skill_install_dir}/portfolio.csv`（不存在时 skill 引导用户从 `assets/portfolio.csv` 复制创建，install.sh 不自动创建）
 - **install.sh 行为应与 clawhub 安装保持一致**：只装 `SKILL.md` + `assets/`，不做用户文件初始化
-- 格式：CSV，表头 `代码,名称,持仓,成本价`，`#` 开头为注释行
-- 名称/持仓/成本价均可留空；持仓为 0 表示纯自选（只查行情）
+- 格式：CSV，表头 `代码,名称,数量,自选价格`，`#` 开头为注释行
+- 名称/数量/自选价格均可留空；数量为 0 表示纯自选（只查行情）
 - 修改 Step 6 逻辑时，6a（文件加载）和 6b（手动输入）均需同步维护
 - `assets/portfolio.csv` 随 skill 一起发布，install.sh 和 clawhub 安装后均可在 skill 目录下找到
 
@@ -110,7 +110,7 @@ rm -rf /tmp/stock-query
 ## Skill 指令调优方法论
 
 - **文字禁令效果有限**：`禁止做X` 类指令对持续性行为问题效果不稳定
-- **有效方案**：改为伪代码分步逻辑（`Step A: ... Step B: ... Step D: 不得跳过`），明确执行顺序比措辞强调更有效——TC-5.4 持仓=0 条目缺失问题经 4 次迭代，伪代码方案最终生效
+- **有效方案**：改为伪代码分步逻辑（`Step A: ... Step B: ... Step D: 不得跳过`），明确执行顺序比措辞强调更有效——TC-5.4 数量=0 条目缺失问题经 4 次迭代，伪代码方案最终生效
 - **emoji 规则修复**：agent 对港股/批量查询自行拼表格时会用错 emoji（🔴当跌色）。有效组合：Step 2 改伪代码 + 禁止列表中显式注明"港股跌幅用🟢"；单独一条禁令无效
 - **版本分级**：指令调优 → patch；功能新增/流程变更 → minor/major
 - **Command 编号**：Command 1 = Portfolio 文件管理（优先路由），Command 3 = 历史行情查询（历史/K线关键词触发），Command 2 = 行情查询（默认 fallback），无 Command 0
