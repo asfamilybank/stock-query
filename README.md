@@ -4,13 +4,13 @@
 
 ## 安装 / 更新
 
-**通过 skills.sh（支持 Claude Code、Cursor、Cline 等 40+ agent）：**
+**通过 [skills.sh](https://skills.sh/asfamilybank/stock-query)（支持 Claude Code、Cursor、Cline 等 40+ agent）：**
 
 ```bash
 npx skills add asfamilybank/stock-query
 ```
 
-**通过 ClawHub（OpenClaw 格式，自然语言触发）：**
+**通过 [ClawHub](https://clawhub.ai/asfamilybank/stock-query)（OpenClaw 格式，自然语言触发）：**
 
 ```bash
 npx clawhub install stock-query
