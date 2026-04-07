@@ -27,21 +27,14 @@ npx clawhub install stock-query
 
 ## 使用方式
 
-**OpenClaw 格式**（自然语言触发）：
+自然语言或 slash command 均可触发：
 
 ```
 查一下 601991 和 518880 的最新价
 查一下腾讯和阿里的港股行情
 AAPL 和 TSLA 现在什么价
-```
-
-也可以跨市场混合查询：
-
-```
 帮我查 601991、00700、AAPL 的行情
 ```
-
-**Claude Code 原生格式**（slash command）：
 
 ```
 /stock-query 601991 518880
