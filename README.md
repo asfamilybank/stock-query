@@ -4,7 +4,7 @@
 
 ## 安装 / 更新
 
-**通过 [skills.sh](https://skills.sh/asfamilybank/stock-query)（支持 Claude Code、Cursor、Cline 等 40+ agent）：**
+**通过 [Skills](https://skills.sh/asfamilybank/stock-query)（支持 Claude Code、Cursor、Cline 等 40+ agent）：**
 
 ```bash
 npx skills add asfamilybank/stock-query
