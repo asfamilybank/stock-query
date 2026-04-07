@@ -81,7 +81,7 @@ AAPL 和 TSLA 现在什么价
 | 权限      | 用途                                          |
 |----------|-----------------------------------------------|
 | network  | curl 调用腾讯财经、新浪财经、天天基金、东方财富的公开 HTTP 接口（仅限七个声明域名） |
-| shell    | 执行 curl、iconv 编码转换；在用户显式指令下通过 grep/awk 读写 `~/.config/stock-query/portfolio.csv` |
+| shell    | 执行 curl、iconv 编码转换、python3 格式化输出；在用户显式指令下通过 grep/awk 读写 `~/.config/stock-query/portfolio.csv` |
 
 本 skill 不对外发送任何用户数据；portfolio.csv 文件操作仅在用户明确指令下触发。
 
