@@ -2,14 +2,8 @@
 name: stock-query
 version: 2.5.0
 description: >
-  查询全球主要市场股票实时行情（A 股、港股、美股、ETF、场外基金、主要指数），支持批量查询、自选市值计算与个股历史K线。
-  同时支持在用户显式指令下管理本地 portfolio.csv 自选股文件（增/删/改/查）；文件仅含股票代码、名称、数量、自选价格，禁止存放账户凭证或密钥。
-  需要 shell 权限执行：curl（行情 API 请求）、iconv（GBK→UTF-8 转码）、grep/awk/mktemp（文件操作，仅限 portfolio.csv）。
-  文件访问：仅限 portfolio.csv 一个文件，优先查找 ~/.config/stock-query/portfolio.csv，其次兼容旧版安装目录（~/.openclaw/workspace/skills/stock-query/ 或 ~/.claude/skills/stock-query/ 或 ~/.agents/skills/stock-query/），无需配置任何环境变量。
-  网络访问：仅限 qt.gtimg.cn、hq.sinajs.cn、push2.eastmoney.com、web.ifzq.gtimg.cn、push2his.eastmoney.com、fundgz.1234567.com.cn、api.fund.eastmoney.com 七个行情数据源。
-  TRIGGER when: 用户要求查看股价、行情、净值、自选盈亏、大盘指数、历史走势/K线，或管理自选股文件时，直接调用，无需等待斜杠命令。
-  NOT for: 加密货币、期货、期权、外汇。
-  用法：/stock-query AAPL 00700 601991
+  查询全球股票实时行情（A 股、港股、美股）、ETF、场外基金、指数，支持批量查询、历史K线（含均线）与自选股管理。
+  TRIGGER when: 用户查询股价/行情/净值/历史K线/自选盈亏/大盘指数时。NOT for: 加密货币、期货、期权、外汇。
 user-invocable: true
 allowed-tools:
   - Bash
