@@ -26,12 +26,13 @@
 ## 版本与发布
 
 - **测试顺序**：`bash bump.sh patch|minor|major alpha` → `bash tests/install_local.sh` 同步 → `bash tests/datasource_check.sh && bash tests/check.sh`；bump alpha 必须在 install_local.sh 之前（否则同步的是旧版本号）
-- **发布顺序**（以测试全过为前提）：**逐项核查 ClawHub 安全扫描项** → **完整更新 CHANGELOG.md** → `bash bump.sh release` → git commit + push → 发 ClawHub；禁止在 CHANGELOG 未完整时 commit
+- **发布顺序**（以测试全过为前提）：**①逐项核查 ClawHub 安全扫描项（不可跳过）** → **②完整更新 CHANGELOG.md** → ③`bash bump.sh release` → ④git commit + push → ⑤发 ClawHub；禁止在①②未完成时执行③
 - **版本管理**：使用 `bump.sh` 统一管理（自动同步四处）；预发布格式 `X.Y.Z-alpha.N`（`bash bump.sh minor alpha` 开启，`bash bump.sh alpha` 递增，`bash bump.sh release` 发正式版）
 - 注意：`SKILL.md` Step 0 正文含硬编码版本字符串（`stock-query vX.X.X`），`bump.sh` 已自动处理；手动 bump 时需用 `replace_all` 一并替换
 - **ClawHub 发布**：只在 openclaw skill（`skill.yaml`、根目录 `SKILL.md`）有变化时执行；description/触发条件改动发 patch，功能改动发 minor/major；`claude/` 目录的改动不需要触发 ClawHub 发布
 - **ClawHub 安全扫描**：扫描器检查以下类别：Purpose & Capability（功能与描述一致性）、Instruction Scope（操作边界明确性）、Credentials（环境变量声明完整性）、Persistence & Privilege（权限组合说明）。修改 skill.yaml/SKILL.md 后如触发扫描警告，参见下方"安全扫描修复规范"。
 - **skills.sh 发布**：git push 即自动生效（直接读 GitHub 仓库），无需额外操作；只在 SKILL.md 或 scripts/ 有变化时需关注
+- **SKILL.md description 长度**：Claude Code 截断超过 250 字符的 description；TRIGGER when / NOT for 必须在前 250 字符内，修改后用 `python3 -c "print(len('...'))"` 验证
 
 ### ClawHub 发布流程
 
@@ -61,6 +62,7 @@ npx skills add asfamilybank/stock-query
 - 安装路径：`~/.agents/skills/stock-query/`，Claude Code 通过 symlink 访问
 - **更新会 rm -rf 安装目录**：portfolio.csv 不能放在安装目录内（已迁移至 `~/.config/stock-query/`）
 - skills.sh 只需 `name` + `description` frontmatter，其余字段（`user-invocable`、`skill.yaml` 等）被忽略但无害
+- **skills.sh 网站页面**：不是 push 即收录，需用户实际安装后才出现在目录；勿提前在 README 放 `https://skills.sh/{owner}/{repo}` 链接
 
 ## 关键目录与文件
 
