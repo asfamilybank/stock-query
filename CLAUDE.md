@@ -96,7 +96,7 @@ npx skills add https://github.com/asfamilybank/stock-query --skill stock-query
 - 两者响应均需 `| iconv -f GBK -t UTF-8` 转码
 - **东方财富行情**（`push2.eastmoney.com`）— 港股/美股备用，UTF-8，JSON 响应，无需 iconv；港股 `secid=116.xxxxx`；美股先试 `secid=105.TICKER`（NASDAQ），null 时试 `106.TICKER`（NYSE）；`fltt=2` 参数直接返回浮点值，f43=最新价 f58=名称 f169=涨跌额 f170=涨跌幅%
 - **腾讯历史K线**（`web.ifzq.gtimg.cn`）— A股/港股历史K线主源；URL 参数格式：`sym,period,start,end,count,adjust`（period=day/week/month，adjust=qfq/hfq/空，start/end 为 YYYY-MM-DD 或空）；响应 key：A股+qfq→`qfqday`，港股固定→`day`；港股不支持复权（adjust 强制空，fq 字段应改为 none）；股票名称以 `\uXXXX` JSON escape 格式返回，需 `_ujson` 解码
-- **东方财富历史K线**（`push2his.eastmoney.com`）— 美股历史K线；直接 curl 返回空响应（HTTP 52，同 push2.eastmoney.com），L7.11 在开发环境会 SKIP；secid 格式：A股 `1./0.`，港股 `116.`，美股 `105.`(NASDAQ)→`106.`(NYSE)
+- **Yahoo Finance**（`query1.finance.yahoo.com`）— 美股历史K线；需 `-A "Mozilla/5.0"` header，否则返回 429；返回 `adjclose` 作为复权价；支持 `interval=1d&range=3mo/1y` 或 `period1/period2` 时间戳两种方式
 
 腾讯 API 前缀：`sh`/`sz`(A股) · `hk`(港股5位) · `us`+ticker(美股) · `us.XXX`(美股指数)
 腾讯字段索引（`~` 分隔）：[1]名称 [3]最新价 [4]昨收 [30]日期时间 [31]涨跌额 [32]涨跌幅% [33]最高 [34]最低
@@ -119,6 +119,8 @@ npx skills add https://github.com/asfamilybank/stock-query --skill stock-query
 - **portfolio.csv 路径**：主路径 `~/.config/stock-query/portfolio.csv`，独立于 skill 安装目录；测试套件通过临时重命名文件模拟 NOT_FOUND（L6.7）
 - **东方财富 push2 API**：`push2.eastmoney.com` 直接 curl 无额外 headers 返回空响应（HTTP 52），L0 DS-5/DS-6 失败时优先排查 headers 而非网络连通性；主力腾讯源正常则不影响功能
 - **check.sh `--skip-network` SKIP 计数**：新增网络测试层时须同步更新 `SKIP=$((SKIP + ...))` 那行数字；当前各层项数：L2=13, L3=5, L4=5, L5=4, L7=11
+- **L5 openclaw 间歇性空响应**：MiniMax-M2.7 有时返回 `payloads: []`，L5 测试须对空响应 SKIP 而非 FAIL；`assert_emoji` 已内置此检测，新增批量测试时须同步加上 `[[ -z "$batch_out" ]] && skip ... && return`
+- **域名白名单同步**：替换 API 时须同步三处：`skill.yaml permissions` 注释、`skill.yaml description`、`SKILL.md 权限与操作范围` 表格
 
 ## Skill 指令调优方法论
 
