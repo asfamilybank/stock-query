@@ -302,7 +302,9 @@ section_L5_emoji() {
   dir_us=$(   printf '%s' "$sq_us" | jq -r '.[0].direction // ""')
   market_us=$(printf '%s' "$sq_us" | jq -r '.[0].market   // ""')
 
-  if [[ -z "$dir_cn" || -z "$dir_us" ]]; then
+  if [[ -z "$batch_out" ]]; then
+    skip "L5.4  跨市场批量 emoji（openclaw 返回空响应，跳过）"
+  elif [[ -z "$dir_cn" || -z "$dir_us" ]]; then
     skip "L5.4  跨市场批量 emoji（无数据，跳过）"
   else
     local exp_cn exp_us
@@ -486,22 +488,10 @@ section_L7() {
     '.error == null and .klines[0].change_pct == null' \
     "600519" --count 3
 
-  # 美股 hist（push2his.eastmoney.com）：网络不可达时 SKIP
-  # push2his 与 push2 同样可能返回 HTTP 52（取决于网络环境），此测试仅在可达时断言
-  local push2his_ok=false
-  if curl -s -m 5 -H "Referer: https://finance.eastmoney.com" \
-      "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=105.AAPL&fields1=f1&fields2=f51&klt=101&fqt=1&beg=0&end=20500101&lmt=1" \
-      2>/dev/null | grep -q '"data"'; then
-    push2his_ok=true
-  fi
-
-  if [[ "$push2his_ok" == "true" ]]; then
-    assert_hist_jq "L7.11 美股 AAPL 日K → error=null market=美股 klines非空" \
-      '.error == null and .market == "美股" and (.klines | length) > 0' \
-      "AAPL" --count 5
-  else
-    skip "L7.11 美股 AAPL 日K（push2his.eastmoney.com 不可达，跳过）"
-  fi
+  # 美股 hist：Yahoo Finance（query1.finance.yahoo.com），无反爬限制
+  assert_hist_jq "L7.11 美股 AAPL 日K → error=null market=美股 klines非空" \
+    '.error == null and .market == "美股" and (.klines | length) > 0' \
+    "AAPL" --count 5
 }
 
 # ── 入口 ──────────────────────────────────────────────────────────────────────

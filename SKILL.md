@@ -1,9 +1,14 @@
 ---
 name: stock-query
-version: 2.5.1
 description: >
   查询全球股票实时行情（A 股、港股、美股）、ETF、场外基金、指数，支持批量查询、历史K线（含均线）与自选股管理。
   TRIGGER when: 用户查询股价/行情/净值/历史K线/自选盈亏/大盘指数时。NOT for: 加密货币、期货、期权、外汇。
+license: MIT
+compatibility: Requires curl, iconv, python3. macOS/Linux only.
+metadata:
+  version: "2.6.0"
+  author: asfamilybank
+  repo: https://github.com/asfamilybank/stock-query
 user-invocable: true
 allowed-tools:
   - Bash
@@ -15,7 +20,7 @@ allowed-tools:
 
 | 权限 | 声明用途 | 限制 |
 |------|---------|------|
-| `network` | `scripts/sq.sh` 内部调用行情 API | 仅限 `qt.gtimg.cn`、`hq.sinajs.cn`、`push2.eastmoney.com`、`web.ifzq.gtimg.cn`、`push2his.eastmoney.com`、`fundgz.1234567.com.cn`、`api.fund.eastmoney.com` 七个数据源，不发送用户个人数据 |
+| `network` | `scripts/sq.sh` 内部调用行情 API | 仅限 `qt.gtimg.cn`、`hq.sinajs.cn`、`push2.eastmoney.com`、`web.ifzq.gtimg.cn`、`query1.finance.yahoo.com`、`fundgz.1234567.com.cn`、`api.fund.eastmoney.com` 七个数据源，不发送用户个人数据 |
 | `shell` | 执行 `curl`、`iconv`、`grep`、`awk`、`mktemp` | 仅操作 `portfolio.csv`；不执行任意命令 |
 
 **文件访问：** 本 skill 仅在用户**显式指令**下读写 `portfolio.csv` 一个文件，优先查找 `~/.config/stock-query/portfolio.csv`，其次兼容旧版安装目录（`~/.openclaw/workspace/skills/stock-query/`、`~/.claude/skills/stock-query/`、`~/.agents/skills/stock-query/`），无需配置任何环境变量。历史数据通过网络实时获取，不写本地文件。
@@ -52,12 +57,12 @@ allowed-tools:
 
 version 输出：
 ```
-stock-query v2.5.1
+stock-query v2.6.0
 ```
 
 help 输出：
 ```
-stock-query v2.5.1 — 全球股票/ETF/基金/指数实时行情查询
+stock-query v2.6.0 — 全球股票/ETF/基金/指数实时行情查询
 
 用法：
   /stock-query <代码> [代码2 ...]   查询一个或多个标的实时行情
@@ -238,7 +243,7 @@ fi
 ```
 Step 2A: 执行命令（不得省略 --format 参数，单支/批量/任意市场均适用）
   detail_mode = false → bash scripts/sq.sh get <code1> [code2 ...] --format table
-  detail_mode = true  → bash scripts/sq.sh get <code1> [code2 ...] --format detail
+  detail_mode = true  → bash scripts/sq.sh get <code1> [code2 ...] --format table --detail
 
 Step 2B: 将命令的 stdout 原样作为回复返回
   ⛔ 不得解析 JSON 自行构建表格

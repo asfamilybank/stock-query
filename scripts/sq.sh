@@ -76,15 +76,15 @@ direction_of() {
   fi
 }
 
-# ── eval-based 映射（bash 3.x 兼容替代 declare -A）───────────────────────────
+# ── 映射工具（printf -v + 间接展开，bash 3.1+ 兼容，无 eval）──────────────────
 
 # key → 去掉非 alnum 字符，保证变量名合法
 _mkey() { printf '%s' "$1" | tr -cs 'a-zA-Z0-9' '_'; }
 
 # _mset NAMESPACE KEY VALUE  /  _mget NAMESPACE KEY  /  _mhas NAMESPACE KEY
-_mset() { local _k; _k=$(_mkey "$2"); eval "_m_${1}_${_k}=\$3"; }
-_mget() { local _k; _k=$(_mkey "$2"); eval "printf '%s' \"\${_m_${1}_${_k}:-}\""; }
-_mhas() { local _k; _k=$(_mkey "$2"); eval "[[ -n \"\${_m_${1}_${_k}:-}\" ]]"; }
+_mset() { local _v="_m_$(_mkey "$1")_$(_mkey "$2")"; printf -v "$_v" '%s' "$3"; }
+_mget() { local _v="_m_$(_mkey "$1")_$(_mkey "$2")"; printf '%s' "${!_v}"; }
+_mhas() { local _v="_m_$(_mkey "$1")_$(_mkey "$2")"; [[ -n "${!_v}" ]]; }
 
 # ── 市场识别 ──────────────────────────────────────────────────────────────────
 
@@ -318,17 +318,18 @@ tencent_hist_fetch() {
     | iconv -f GBK -t UTF-8 2>/dev/null
 }
 
-# ── 东方财富历史K线 API（美股）────────────────────────────────────────────────
-# klt: 101=日K 102=周K 103=月K
-# fqt: 0=不复权 1=前复权 2=后复权
-# lmt: 返回条数上限；beg/end: YYYYMMDD（0=不限）
+# ── Yahoo Finance 历史K线 API（美股）─────────────────────────────────────────
+# interval: 1d=日K 1wk=周K 1mo=月K
+# range: 3mo/6mo/1y/2y/5y；或用 period1/period2（Unix 时间戳）指定区间
 
-em_hist_fetch() {
-  local secid="$1" klt="$2" fqt="$3" lmt="$4" beg="${5:-0}" end="${6:-20500101}"
-  curl -s -m "$TIMEOUT" \
-    -H "Referer: https://finance.eastmoney.com" \
-    "https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=${secid}&fields1=f1,f2,f3,f4,f5,f6&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61&klt=${klt}&fqt=${fqt}&beg=${beg}&end=${end}&lmt=${lmt}"
+yahoo_hist_fetch() {
+  local sym="$1" interval="$2" range="${3:-}" period1="${4:-}" period2="${5:-}"
+  local url="https://query1.finance.yahoo.com/v8/finance/chart/${sym}?interval=${interval}"
+  [[ -n "$range"   ]] && url="${url}&range=${range}"
+  [[ -n "$period1" ]] && url="${url}&period1=${period1}&period2=${period2}"
+  curl -s -m "$TIMEOUT" -A "Mozilla/5.0" "$url"
 }
+
 
 # ── 东方财富 API（港股/美股备用）─────────────────────────────────────────────
 
@@ -622,7 +623,7 @@ cmd_fund() {
 # 用法: sq hist <code> [--period day|week|month] [--count N]
 #                      [--start YYYY-MM-DD] [--end YYYY-MM-DD]
 #                      [--fq pre|post|none]
-# 数据源: A股/港股 → 腾讯 web.ifzq.gtimg.cn；美股 → 东方财富 push2his.eastmoney.com
+# 数据源: A股/港股 → 腾讯 web.ifzq.gtimg.cn；美股 → Yahoo Finance query1.finance.yahoo.com
 # 输出字段: code name market period fq klines[] error
 # klines 字段: date open close high low volume change_pct change
 #   A股/港股额外字段 amount=null；美股额外字段 amplitude turnover
@@ -673,8 +674,15 @@ cmd_hist() {
 
   [[ -z "$code" ]] && { printf 'sq hist: code is required\n' >&2; exit 1; }
 
-  # 日期范围模式：不按 count 截断
-  [[ "$has_date_range" == true ]] && lmt="500"
+  # 日期范围模式：不按 count 截断；普通模式：多取 61 条供 MA60 + 首行涨跌幅计算
+  local display_lmt
+  if [[ "$has_date_range" == true ]]; then
+    display_lmt="0"      # 0 = 显示全部
+    lmt="500"
+  else
+    display_lmt="$lmt"
+    lmt=$(( lmt + 61 ))
+  fi
 
   # 分类代码
   local cls; cls=$(classify_code "$code")
@@ -780,49 +788,125 @@ cmd_hist() {
     done < <(printf '%s' "$resp" | grep -oE '"[0-9]{4}-[0-9]{2}-[0-9]{2}","[0-9.]+","[0-9.]+","[0-9.]+","[0-9.]+","[0-9.]+"')
 
   else
-    # ── 美股：东方财富历史K线 ─────────────────────────────────────────────────
+    # ── 美股：Yahoo Finance 历史K线 ──────────────────────────────────────────
     market_name="美股"
-    local secid="105.${sym}"
-    local resp; resp=$(em_hist_fetch "$secid" "$klt" "$fqt" "$lmt" "$beg" "$end")
-    # NASDAQ(105) 无数据时回退 NYSE(106)
-    if [[ -z "$resp" || "$resp" == *'"data":null'* ]]; then
-      secid="106.${sym}"
-      resp=$(em_hist_fetch "$secid" "$klt" "$fqt" "$lmt" "$beg" "$end")
+    local yinterval
+    case "$klt" in
+      101) yinterval="1d"  ;;
+      102) yinterval="1wk" ;;
+      103) yinterval="1mo" ;;
+      *)   yinterval="1d"  ;;
+    esac
+
+    local resp
+    if [[ "$has_date_range" == true ]]; then
+      # YYYYMMDD → Unix 时间戳（python3 跨平台）
+      local p1 p2
+      p1=$(python3 -c "from datetime import datetime; s='${beg}'; print(int(datetime(int(s[:4]),int(s[4:6]),int(s[6:])).timestamp()))" 2>/dev/null || echo "")
+      p2=$(python3 -c "from datetime import datetime; s='${end}'; print(int(datetime(int(s[:4]),int(s[4:6]),int(s[6:])).timestamp()))" 2>/dev/null || echo "")
+      if [[ -n "$p1" && -n "$p2" ]]; then
+        resp=$(yahoo_hist_fetch "$sym" "$yinterval" "" "$p1" "$p2")
+      else
+        resp=$(yahoo_hist_fetch "$sym" "$yinterval" "1y" "" "")
+      fi
+    else
+      local yrange
+      if   (( lmt <= 30  )); then yrange="3mo"
+      elif (( lmt <= 90  )); then yrange="6mo"
+      elif (( lmt <= 250 )); then yrange="1y"
+      elif (( lmt <= 500 )); then yrange="2y"
+      else                        yrange="5y"; fi
+      resp=$(yahoo_hist_fetch "$sym" "$yinterval" "$yrange" "" "")
     fi
 
-    if [[ -z "$resp" || "$resp" == *'"data":null'* ]]; then
+    # 用 python3 解析 Yahoo Finance JSON，输出 name 和 kline 对象流（每行一个）
+    local _ypy; _ypy=$(mktemp /tmp/sqyhist_XXXXXX.py)
+    trap 'rm -f "$_ypy"' RETURN
+    cat > "$_ypy" << 'PYEOF'
+import json, sys
+from datetime import datetime, timezone
+
+lmt_arg    = int(sys.argv[1])   if len(sys.argv) > 1 else 30
+has_range  = sys.argv[2]        == 'true' if len(sys.argv) > 2 else False
+use_adj    = sys.argv[3]        != '0'    if len(sys.argv) > 3 else True
+
+try:
+    d = json.loads(sys.stdin.read())
+    result = (d.get('chart') or {}).get('result') or []
+    if not result:
+        print(json.dumps({'ok': False})); sys.exit(0)
+    r = result[0]
+    meta = r.get('meta') or {}
+    name = meta.get('longName') or meta.get('shortName') or ''
+    timestamps = r.get('timestamp') or []
+    q = ((r.get('indicators') or {}).get('quote') or [{}])[0]
+    opens  = q.get('open')   or []
+    highs  = q.get('high')   or []
+    lows   = q.get('low')    or []
+    vols   = q.get('volume') or []
+    raw_closes = q.get('close') or []
+    adj_list = ((r.get('indicators') or {}).get('adjclose') or [{}])
+    adj_closes = (adj_list[0].get('adjclose') or []) if adj_list else []
+    closes = adj_closes if (use_adj and len(adj_closes) == len(timestamps)) else raw_closes
+
+    def r4(v): return round(v, 4) if v is not None else None
+
+    rows = []
+    for i, ts in enumerate(timestamps):
+        c = closes[i] if i < len(closes) else None
+        if c is None: continue
+        rows.append({
+            'date':   datetime.fromtimestamp(ts, tz=timezone.utc).strftime('%Y-%m-%d'),
+            'open':   r4(opens[i]  if i < len(opens)  else None),
+            'close':  r4(c),
+            'high':   r4(highs[i]  if i < len(highs)  else None),
+            'low':    r4(lows[i]   if i < len(lows)   else None),
+            'volume': int(vols[i]) if i < len(vols) and vols[i] is not None else None,
+        })
+
+    if not has_range and len(rows) > lmt_arg:
+        rows = rows[-lmt_arg:]
+
+    prev_close = None
+    klines = []
+    for row in rows:
+        change = change_pct = None
+        if prev_close and prev_close != 0:
+            change     = round(row['close'] - prev_close, 4)
+            change_pct = round(change / prev_close * 100,  4)
+        prev_close = row['close']
+        klines.append({
+            'date': row['date'], 'open': row['open'], 'close': row['close'],
+            'high': row['high'], 'low':  row['low'],  'volume': row['volume'],
+            'amount': None, 'change_pct': change_pct, 'change': change,
+            'amplitude': None, 'turnover': None,
+        })
+    print(json.dumps({'ok': True, 'name': name, 'klines': klines}, ensure_ascii=False))
+except Exception:
+    print(json.dumps({'ok': False}))
+PYEOF
+
+    local use_adj=1; [[ "$fqt" == "0" ]] && use_adj=0
+    local parsed; parsed=$(printf '%s' "$resp" | python3 "$_ypy" "$lmt" "$has_date_range" "$use_adj")
+
+    if [[ -z "$parsed" ]] || [[ "$parsed" == *'"ok": false'* ]] || [[ "$parsed" == *'"ok":false'* ]]; then
       printf ']' >> "$kf"
       printf '{"code":%s,"name":null,"market":"美股","period":%s,"fq":%s,"klines":[],"error":"历史数据不可用，请稍后重试"}\n' \
         "$(jstr "$code")" "$(jstr "$period_name")" "$(jstr "$fq_name")"
       rm -f "$kf"; return 0
     fi
 
-    name=$(printf '%s' "$resp" | grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+    name=$(printf '%s' "$parsed" | python3 -c "import json,sys; print(json.load(sys.stdin).get('name',''))" 2>/dev/null)
 
-    # 东方财富 kline：带引号的 CSV 字符串 "date,open,close,high,low,vol,amount,amp,chg%,chg,turnover"
-    while IFS= read -r ks; do
-      [[ -z "$ks" ]] && continue
-      ks="${ks//\"/}"
-
-      local date open close high low volume amount amplitude change_pct change turnover
-      date=$(       printf '%s' "$ks" | cut -d',' -f1)
-      open=$(       printf '%s' "$ks" | cut -d',' -f2)
-      close=$(      printf '%s' "$ks" | cut -d',' -f3)
-      high=$(       printf '%s' "$ks" | cut -d',' -f4)
-      low=$(        printf '%s' "$ks" | cut -d',' -f5)
-      volume=$(     printf '%s' "$ks" | cut -d',' -f6)
-      amount=$(     printf '%s' "$ks" | cut -d',' -f7)
-      amplitude=$(  printf '%s' "$ks" | cut -d',' -f8)
-      change_pct=$( printf '%s' "$ks" | cut -d',' -f9)
-      change=$(     printf '%s' "$ks" | cut -d',' -f10)
-      turnover=$(   printf '%s' "$ks" | cut -d',' -f11)
-
+    while IFS= read -r kline_obj; do
+      [[ -z "$kline_obj" ]] && continue
       [[ "$first" == true ]] && first=false || printf ',' >> "$kf"
-      printf '{"date":%s,"open":%s,"close":%s,"high":%s,"low":%s,"volume":%s,"amount":%s,"change_pct":%s,"change":%s,"amplitude":%s,"turnover":%s}' \
-        "$(jstr "$date")" "$(jnum "$open")" "$(jnum "$close")" "$(jnum "$high")" "$(jnum "$low")" \
-        "$(jnum "$volume")" "$(jnum "$amount")" "$(jnum "$change_pct")" "$(jnum "$change")" \
-        "$(jnum "$amplitude")" "$(jnum "$turnover")" >> "$kf"
-    done < <(printf '%s' "$resp" | grep -oE '"[0-9]{4}-[0-9]{2}-[0-9]{2},[^"]+"')
+      printf '%s' "$kline_obj" >> "$kf"
+    done < <(printf '%s' "$parsed" | python3 -c "
+import json,sys
+for k in json.load(sys.stdin).get('klines',[]):
+    print(json.dumps(k,ensure_ascii=False))
+" 2>/dev/null)
   fi
 
   printf ']' >> "$kf"
@@ -835,8 +919,8 @@ cmd_hist() {
     return 0
   fi
 
-  printf '{"code":%s,"name":%s,"market":%s,"period":%s,"fq":%s,"klines":' \
-    "$(jstr "$code")" "$(jstr "$name")" "$(jstr "$market_name")" "$(jstr "$period_name")" "$(jstr "$fq_name")"
+  printf '{"code":%s,"name":%s,"market":%s,"period":%s,"fq":%s,"display_count":%s,"klines":' \
+    "$(jstr "$code")" "$(jstr "$name")" "$(jstr "$market_name")" "$(jstr "$period_name")" "$(jstr "$fq_name")" "$display_lmt"
   cat "$kf"
   printf ',"error":null}\n'
   rm -f "$kf"
@@ -866,18 +950,120 @@ cmd_pfile() {
   printf '%s\n' "$pfile"
 }
 
+# ── detail MA 注入 ────────────────────────────────────────────────────────────
+# 从 stdin 读取 sq get JSON 数组，为每个非 error/fund 条目 fetch 60 日收盘价并注入 MA5/10/20/60
+
+_enrich_detail_json() {
+  local _input; _input=$(cat)
+  local _py; _py=$(mktemp /tmp/sqma_XXXXXX.py)
+  trap 'rm -f "$_py"' RETURN
+  cat > "$_py" << 'PYEOF'
+import json, sys, subprocess
+
+SH_IDX = {'000001','000010','000015','000016','000300','000688',
+           '000852','000903','000905','000906','000985'}
+
+def tsym_of(item):
+    market = item.get('market', '')
+    code   = str(item.get('code', ''))
+    itype  = item.get('type', '')
+    if market == '港股':
+        try:    return 'hk%05d' % int(code), ''
+        except: return 'hk' + code, ''
+    if market == '美股':
+        return 'us' + code, ''
+    if market == 'A股':
+        fq = 'qfq' if itype in ('stock', 'etf') else ''
+        if code and code[0] in ('6', '5'):
+            return 'sh' + code, fq
+        if code in SH_IDX:
+            return 'sh' + code, ''
+        return 'sz' + code, fq
+    return None, ''
+
+def fetch_klines(tsym, adjust):
+    """Return (closes, volumes) lists, oldest→newest."""
+    if tsym.startswith('us'):
+        # 美股：Yahoo Finance
+        sym = tsym[2:]
+        url = ('https://query1.finance.yahoo.com/v8/finance/chart/'
+               '%s?interval=1d&range=3mo' % sym)
+        headers = ['-A', 'Mozilla/5.0']
+    else:
+        # A股/港股：腾讯历史K线
+        url = ('https://web.ifzq.gtimg.cn/appstock/app/fqkline/get'
+               '?param=%s,day,,,60,%s' % (tsym, adjust))
+        headers = []
+    try:
+        r = subprocess.run(['curl', '-s', '-m', '8'] + headers + [url],
+                           capture_output=True, timeout=10)
+        if tsym.startswith('us'):
+            d = json.loads(r.stdout.decode())
+            result = (d.get('chart') or {}).get('result') or []
+            if not result:
+                return [], []
+            q = ((result[0].get('indicators') or {}).get('quote') or [{}])[0]
+            adj = ((result[0].get('indicators') or {}).get('adjclose') or [{}])
+            adj_closes = (adj[0].get('adjclose') or []) if adj else []
+            raw_closes  = adj_closes if adj_closes else (q.get('close') or [])
+            raw_volumes = q.get('volume') or []
+            closes  = [c for c in raw_closes  if c is not None]
+            volumes = [v for v in raw_volumes if v is not None]
+            return closes, volumes
+        else:
+            raw = r.stdout.decode('gbk', errors='replace')
+            d = json.loads(raw)
+            kdata = (d.get('data') or {}).get(tsym, {})
+            for key in ('qfqday', 'day'):
+                if key in kdata:
+                    rows = kdata[key]
+                    closes  = [float(row[2]) for row in rows]
+                    volumes = [float(row[5]) for row in rows if len(row) > 5]
+                    return closes, volumes
+    except Exception:
+        pass
+    return [], []
+
+def ma(vals, n):
+    if len(vals) < n:
+        return None
+    return round(sum(vals[-n:]) / n, 2)
+
+items = json.loads(sys.stdin.read(), parse_float=str)
+for item in items:
+    if item.get('error') or item.get('type') == 'fund':
+        item['ma5'] = item['ma10'] = item['vol_ma5'] = item['vol_ma10'] = None
+        continue
+    tsym, adj = tsym_of(item)
+    if not tsym:
+        item['ma5'] = item['ma10'] = item['vol_ma5'] = item['vol_ma10'] = None
+        continue
+    closes, volumes = fetch_klines(tsym, adj)
+    item['ma5']     = ma(closes,  5)
+    item['ma10']    = ma(closes,  10)
+    item['vol_ma5'] = ma(volumes, 5)
+    item['vol_ma10']= ma(volumes, 10)
+
+print(json.dumps(items, ensure_ascii=False))
+PYEOF
+  printf '%s' "$_input" | python3 "$_py"
+}
+
 # ── 入口 ──────────────────────────────────────────────────────────────────────
-# get/fund/hist 支持 --format <fmt>（table|detail|json）
-# 存在时，输出通过 fmt.sh 格式化；不存在时，行为与之前完全相同（输出原始 JSON）
+# get/fund/hist 支持 --format table|json|csv  和  --detail（独立 boolean）
+# 有 --format 或 --detail 时输出经 fmt.sh 格式化；否则输出原始 JSON
 
 _extract_fmt() {
-  _FMT_ARG=""; _REST_ARGS=()
+  _FMT_ARG=""; _DETAIL_ARG=""; _REST_ARGS=()
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --format|-f) _FMT_ARG="${2:-table}"; shift 2 ;;
+      --detail|-d) _DETAIL_ARG="true"; shift ;;
       *) _REST_ARGS+=("$1"); shift ;;
     esac
   done
+  # --detail 单独使用时默认 table
+  [[ -n "$_DETAIL_ARG" && -z "$_FMT_ARG" ]] && _FMT_ARG="table"
 }
 
 subcmd="${1:-}"
@@ -887,11 +1073,18 @@ case "$subcmd" in
   get|fund|hist)
     _extract_fmt "$@"
     if [[ -n "$_FMT_ARG" && -f "$_FMT_SH" ]]; then
+      _detail_flag="${_DETAIL_ARG:+--detail}"
       case "$subcmd" in
-        get)  cmd_get  "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" ;;
-        fund) cmd_fund "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" ;;
-        hist) cmd_hist "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" ;;
-      esac | bash "$_FMT_SH" --format "$_FMT_ARG"
+        get)
+          if [[ -n "$_DETAIL_ARG" ]]; then
+            cmd_get "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" | _enrich_detail_json | bash "$_FMT_SH" --format "$_FMT_ARG" --detail
+          else
+            cmd_get "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" | bash "$_FMT_SH" --format "$_FMT_ARG"
+          fi
+          ;;
+        fund) cmd_fund "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" | bash "$_FMT_SH" --format "$_FMT_ARG" ${_detail_flag:+"$_detail_flag"} ;;
+        hist) cmd_hist "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" | bash "$_FMT_SH" --format "$_FMT_ARG" ${_detail_flag:+"$_detail_flag"} ;;
+      esac
     else
       case "$subcmd" in
         get)  cmd_get  "${_REST_ARGS[@]+"${_REST_ARGS[@]}"}" ;;
@@ -902,10 +1095,10 @@ case "$subcmd" in
     ;;
   pfile) cmd_pfile "$@" ;;
   *)
-    printf 'usage:\n  sq get   <code> [code...] [--format table|detail|json]   查询实时行情\n' >&2
-    printf '  sq fund  <code> [code...] [--format table|detail|json]   查询场外基金净值\n' >&2
-    printf '  sq hist  <code> [opts]    [--format table|json]          查询历史K线\n' >&2
-    printf '  sq pfile                                                  定位 portfolio.csv 路径\n' >&2
+    printf 'usage:\n  sq get   <code> [code...] [--format table|json|csv] [--detail]   查询实时行情\n' >&2
+    printf '  sq fund  <code> [code...] [--format table|json|csv] [--detail]   查询场外基金净值\n' >&2
+    printf '  sq hist  <code> [opts]    [--format table|json|csv] [--detail]   查询历史K线\n' >&2
+    printf '  sq pfile                                                          定位 portfolio.csv 路径\n' >&2
     exit 1
     ;;
 esac

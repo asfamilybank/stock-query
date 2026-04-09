@@ -1,5 +1,26 @@
 # Changelog
 
+## [2.6.0] - 2026-04-09
+
+### Added
+- `sq hist --detail`：新增 量MA5 / 量MA10 列（成交量5日/10日均线，A股/港股显示万手，美股显示原始数值）
+- `sq get --detail`：同步新增 量MA5 / 量MA10 列，通过历史K线数据计算注入
+- `--format csv`：get / hist 均新增 CSV 输出格式（`--format csv`）
+- `--detail`：拆分为独立 boolean 参数，与 `--format` 正交（可单独使用，默认 table）
+- 美股历史K线改用 Yahoo Finance（`query1.finance.yahoo.com`），替换无法访问的东方财富 `push2his` 接口
+
+### Changed
+- hist：多取 `lmt+61` 条额外K线，确保全部显示行的涨跌幅与 MA5/MA10 均非空
+- `_enrich_detail_json`：`fetch_closes` 改为 `fetch_klines`，同时返回收盘价与成交量用于计算量MA
+- `sq.sh` map 辅助函数：`eval` 替换为 `printf -v` + `${!var}` 间接展开（消除命令注入风险）
+- 移除已无调用的 `em_hist_fetch` 函数
+- 域名白名单：`push2his.eastmoney.com` 替换为 `query1.finance.yahoo.com`（skill.yaml / SKILL.md / 注释同步更新）
+- SKILL.md frontmatter：新增 `license`、`compatibility`、`metadata`（含 version/author/repo）字段
+- `bump.sh`：更新为读写 `metadata.version`（带缩进和引号）
+
+### Fixed
+- `tests/check.sh` L5.4：`batch_out` 为空时改为 SKIP（openclaw 间歇性返回空 payload），与 L5.1-L5.3 行为一致
+
 ## [2.5.1] - 2026-04-07
 
 ### Fixed

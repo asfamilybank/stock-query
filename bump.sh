@@ -129,8 +129,8 @@ esac
 # skill.yaml
 sed_i "s/^version: ${CURRENT}/version: ${NEW}/" "$SKILL_YAML"
 
-# SKILL.md frontmatter（只替换 frontmatter 内的 version 行）
-sed_i "s/^version: ${CURRENT}/version: ${NEW}/" "$SKILL_MD"
+# SKILL.md frontmatter（metadata.version，带缩进和引号）
+sed_i "s/  version: \"${CURRENT}\"/  version: \"${NEW}\"/" "$SKILL_MD"
 
 # SKILL.md 正文（stock-query vX.X.X，可能多处）
 sed_i "s/stock-query v${CURRENT}/stock-query v${NEW}/g" "$SKILL_MD"
@@ -146,7 +146,7 @@ check() {
 }
 
 check "$SKILL_YAML"   "^version: ${NEW}"
-check "$SKILL_MD"     "^version: ${NEW}"
+check "$SKILL_MD"     "  version: \"${NEW}\""
 check "$CLAWHUB_JSON" "\"version\": \"${NEW}\""
 
 ok "${CURRENT} → ${NEW}"
